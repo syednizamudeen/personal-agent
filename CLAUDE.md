@@ -48,3 +48,15 @@ This is a single Express process (`src/server.js`) that also boots two in-proces
 **Ollama model pull is a one-shot Compose service, not a manual step.** `docker-compose.yml` has an `ollama-pull` service (`depends_on: ollama: condition: service_healthy`, `entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-gemma3:4b}"]`, `restart: "no"`) that runs once per `up` and exits; `app` depends on it via `condition: service_completed_successfully`. `ollama pull` is idempotent against the `ollama_data` volume, so this is fast after the first run. If you change the model, set `OLLAMA_MODEL` in `.env` before `docker compose up` — don't hardcode a different model name only in `app`'s environment, or `ollama-pull` will pull a different model than the app requests from Ollama.
 
 **Migrations do not run automatically.** The container CMD is just `node src/server.js` — `prisma migrate deploy` must be run manually (`docker compose exec app npx prisma migrate deploy`) after first startup and after adding new migration files. There is no entrypoint script that does this on boot.
+
+## Planned: admin + tenant web portals (not yet built)
+
+As of 2026-09-06 this app is API/curl-only — no frontend, no user accounts, no session-based auth exist anywhere in the codebase. The user has requested, and this is confirmed in-scope for upcoming work:
+
+- A **super-admin portal**: full visibility/control across all tenants — view and edit any tenant's `MessageLog`s and `CorrectionRule`s, and broader platform administration (exact scope still being scoped out with the user as of this writing).
+- **Per-tenant login/portal**: each tenant gets their own account to manage their own auto-replies, correction rules, and customizations — separate from the super-admin's cross-tenant view.
+- A **UI-driven onboarding flow** to replace the current curl-only tenant-creation + QR-scanning flow, which the user found functional but not smooth.
+
+This is being brainstormed (superpowers:brainstorming) as of 2026-09-06 — check for a design doc under `docs/superpowers/specs/` dated on or after that day before assuming it's undesigned or unstarted.
+
+**Standing documentation requirement:** the user has explicitly asked that `README.md` and this `CLAUDE.md` be kept up to date whenever new features are built, now and in the future — not just at the end of a big task. Update both as part of implementing any feature, not as an afterthought.
