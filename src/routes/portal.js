@@ -11,6 +11,11 @@ router.use(requireTenantSession);
 
 router.post('/sessions', sessionController.createSession);
 router.get('/sessions/:sessionId', sessionController.getSessionStatus);
+router.post('/sessions/:sessionId/reconnect', async (req, res) => {
+  const { reconnectSession } = require('../services/baileysManager');
+  await reconnectSession(req.tenant.id, req.params.sessionId);
+  res.json({ ok: true });
+});
 router.get('/messages', sessionController.listMessageLogs);
 router.get('/corrections', reviewController.listCorrections);
 router.post('/corrections', reviewController.createCorrection);

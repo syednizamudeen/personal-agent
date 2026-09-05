@@ -6,6 +6,7 @@ const prisma = require('../db/prisma');
 const logger = require('../config/logger');
 const { createRedisConnection } = require('../config/redis');
 const { useRedisAuthState, clearAuthState } = require('./redisAuthState');
+const { sendDisconnectAlertEmail } = require('./emailService');
 
 // Required lazily inside handleIncomingMessage to avoid a circular require
 // (messageQueue -> replyQueue -> baileysManager -> messageQueue).
@@ -60,6 +61,7 @@ async function startSession(tenantId, sessionId) {
             phoneNumber: sock.user?.id?.split(':')[0] || null,
           },
         });
+        await prisma.whatsAppSession.updateMany({ where: { id: sessionId }, data: { disconnectNotifiedAt: null } });
         logger.info({ tenantId, sessionId }, 'WhatsApp session connected');
       }
 
@@ -76,6 +78,7 @@ async function startSession(tenantId, sessionId) {
 
         if (loggedOut) {
           await clearAuthState(redis, tenantId);
+          await notifyDisconnectIfNeeded(tenantId, sessionId);
         } else if (count === 0) {
           logger.warn({ tenantId, sessionId }, 'Session record gone, not reconnecting');
         } else {
@@ -157,4 +160,23 @@ async function resumeActiveSessions() {
   }
 }
 
-module.exports = { startSession, getSocket, activeSockets, resumeActiveSessions };
+async function notifyDisconnectIfNeeded(tenantId, sessionId) {
+  const session = await prisma.whatsAppSession.findUnique({ where: { id: sessionId } });
+  if (!session || session.disconnectNotifiedAt) return;
+
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant?.loginEmail) return;
+
+  await sendDisconnectAlertEmail(tenant.loginEmail, tenant.name);
+  await prisma.whatsAppSession.update({ where: { id: sessionId }, data: { disconnectNotifiedAt: new Date() } });
+}
+
+async function reconnectSession(tenantId, sessionId) {
+  await prisma.whatsAppSession.updateMany({
+    where: { id: sessionId },
+    data: { status: 'PENDING_QR', qrCode: null },
+  });
+  await startSession(tenantId, sessionId);
+}
+
+module.exports = { startSession, reconnectSession, getSocket, activeSockets, resumeActiveSessions };
