@@ -287,18 +287,20 @@ with an error rather than creating a duplicate. Log in at
 
 Tenants log in separately at `http://localhost:8080/portal/login`, using
 `Tenant.loginEmail` / a password — not the `x-api-key` header used by the
-curl flow. **Onboarding path:** a super-admin creates the tenant first
-(`POST /admin/tenants` only takes `name`/`rateLimitHours` — it does not
-accept a password, or currently even a login email, directly), then uses
-**"Send password reset"** in the admin portal so the tenant sets their own
-password via emailed link.
+curl flow. **Onboarding path:**
 
-Note: as of this writing, no admin endpoint actually sets
-`Tenant.loginEmail` either (`POST /admin/tenants` and
-`PATCH /admin/tenants/:id` both omit it) — "Send password reset" will 400
-with `Tenant has no login email set` until that column is populated
-directly in the database for a given tenant. This is a known gap (see
-`CLAUDE.md`), not something to work around in normal usage today.
+1. A super-admin creates the tenant (`POST /admin/tenants` — takes
+   `name`/`rateLimitHours`; it does not accept a password directly).
+2. The super-admin sets the tenant's login email via
+   `PATCH /admin/tenants/:id` with `{ "loginEmail": "tenant@example.com" }`
+   in the body (also available from the admin portal UI).
+3. The super-admin triggers **"Send password reset"**
+   (`POST /admin/tenants/:id/send-password-reset`) so the tenant receives an
+   emailed link to set their own password.
+
+Note: `send-password-reset` still returns 400 with
+`Tenant has no login email set` if step 2 is skipped — that's just normal
+validation on a required field, not a gap in the flow.
 
 ### Environment variables for the portals
 
