@@ -1,27 +1,18 @@
-const express = require('express');
 const { port } = require('./config/env');
 const logger = require('./config/logger');
-const apiRoutes = require('./routes/api');
-const { createSessionMiddleware } = require('./config/session');
-const portalRoutes = require('./routes/portal');
-const adminRoutes = require('./routes/admin');
+const { createApp } = require('./app');
 const { startMessageWorker } = require('./queues/messageQueue');
 const { startReplyWorker } = require('./queues/replyQueue');
 const { resumeActiveSessions } = require('./services/baileysManager');
 
-const app = express();
-app.use(express.json({ limit: '15mb' })); // headroom for base64-encoded WhatsApp images
-app.use(createSessionMiddleware());
-
-app.get('/health', (req, res) => res.json({ ok: true }));
-app.use('/api/v1', apiRoutes);
-app.use('/api/v1/portal', portalRoutes);
-app.use('/api/v1/admin', adminRoutes);
-
-app.use((err, req, res, next) => {
-  logger.error({ err }, 'Unhandled request error');
-  res.status(500).json({ error: 'Internal server error' });
+// Defense in depth: an async handler that escapes its try/catch (or a rejected
+// promise outside the request lifecycle) should be logged, not silently crash
+// the process on Node's default unhandled-rejection behaviour.
+process.on('unhandledRejection', (err) => {
+  logger.error({ err }, 'Unhandled promise rejection');
 });
+
+const app = createApp();
 
 app.listen(port, () => {
   logger.info({ port }, 'Admin API listening');
