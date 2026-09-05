@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PortalAuthProvider, AdminAuthProvider, usePortalAuth, useAdminAuth } from './lib/authContext';
 import { PortalLogin } from './pages/portal/PortalLogin';
+import { PortalDashboard } from './pages/portal/PortalDashboard';
 import { AdminLogin } from './pages/admin/AdminLogin';
 
 const queryClient = new QueryClient();
@@ -33,7 +34,7 @@ export function App() {
                 path="/portal/*"
                 element={
                   <PortalGuard>
-                    <div>Portal dashboard placeholder</div>
+                    <PortalDashboard />
                   </PortalGuard>
                 }
               />

@@ -45,6 +45,18 @@ async function getSessionStatus(req, res) {
   });
 }
 
+async function listSessions(req, res) {
+  const sessions = await prisma.whatsAppSession.findMany({ where: { tenantId: req.tenant.id }, orderBy: { createdAt: 'desc' } });
+  res.json(
+    sessions.map((s) => ({
+      sessionId: s.id,
+      status: s.status,
+      phoneNumber: s.phoneNumber,
+      qrCode: s.status === 'PENDING_QR' ? s.qrCode : null,
+    }))
+  );
+}
+
 async function listMessageLogs(req, res) {
   const tenant = req.tenant;
   const { status, limit } = req.query;
@@ -58,4 +70,4 @@ async function listMessageLogs(req, res) {
   res.json(logs);
 }
 
-module.exports = { createTenant, createSession, getSessionStatus, listMessageLogs };
+module.exports = { createTenant, createSession, getSessionStatus, listSessions, listMessageLogs };

@@ -10,6 +10,7 @@ router.use('/', portalAuthController);
 router.use(requireTenantSession);
 
 router.post('/sessions', sessionController.createSession);
+router.get('/sessions', sessionController.listSessions);
 router.get('/sessions/:sessionId', sessionController.getSessionStatus);
 router.post('/sessions/:sessionId/reconnect', async (req, res) => {
   const { reconnectSession } = require('../services/baileysManager');
