@@ -5,6 +5,7 @@ import { PortalAuthProvider, AdminAuthProvider, usePortalAuth, useAdminAuth } fr
 import { PortalLogin } from './pages/portal/PortalLogin';
 import { PortalDashboard } from './pages/portal/PortalDashboard';
 import { AdminLogin } from './pages/admin/AdminLogin';
+import { AdminDashboard } from './pages/admin/AdminDashboard';
 
 const queryClient = new QueryClient();
 
@@ -42,7 +43,7 @@ export function App() {
                 path="/admin/*"
                 element={
                   <AdminGuard>
-                    <div>Admin dashboard placeholder</div>
+                    <AdminDashboard />
                   </AdminGuard>
                 }
               />
