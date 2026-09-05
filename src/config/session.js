@@ -1,7 +1,9 @@
 const session = require('express-session');
-const RedisStore = require('connect-redis').default;
+const connectRedis = require('connect-redis');
 const { sessionSecret } = require('./env');
 const { createRedisConnection } = require('./redis');
+
+const RedisStore = connectRedis(session);
 
 function createSessionMiddleware(store) {
   return session({
