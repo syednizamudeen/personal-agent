@@ -168,7 +168,7 @@ async function notifyDisconnectIfNeeded(tenantId, sessionId) {
   if (!tenant?.loginEmail) return;
 
   await sendDisconnectAlertEmail(tenant.loginEmail, tenant.name);
-  await prisma.whatsAppSession.update({ where: { id: sessionId }, data: { disconnectNotifiedAt: new Date() } });
+  await prisma.whatsAppSession.updateMany({ where: { id: sessionId }, data: { disconnectNotifiedAt: new Date() } });
 }
 
 async function reconnectSession(tenantId, sessionId) {
@@ -179,4 +179,4 @@ async function reconnectSession(tenantId, sessionId) {
   await startSession(tenantId, sessionId);
 }
 
-module.exports = { startSession, reconnectSession, getSocket, activeSockets, resumeActiveSessions };
+module.exports = { startSession, reconnectSession, notifyDisconnectIfNeeded, getSocket, activeSockets, resumeActiveSessions };
