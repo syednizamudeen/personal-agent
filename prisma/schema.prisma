@@ -27,13 +27,26 @@ enum RuleAction {
   FORCE_CATEGORY
 }
 
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ActorType {
+  SUPER_ADMIN
+  TENANT
+}
+
 model Tenant {
-  id              String   @id @default(uuid())
+  id              String       @id @default(uuid())
   name            String
-  apiKey          String   @unique @default(uuid())
-  rateLimitHours  Int      @default(24)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  apiKey          String       @unique @default(uuid())
+  rateLimitHours  Int          @default(24)
+  loginEmail      String?      @unique
+  passwordHash    String?
+  status          TenantStatus @default(ACTIVE)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   sessions        WhatsAppSession[]
   messageLogs     MessageLog[]
@@ -50,6 +63,7 @@ model WhatsAppSession {
   status      SessionStatus @default(PENDING_QR)
   phoneNumber String?
   qrCode      String?
+  disconnectNotifiedAt DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -99,4 +113,46 @@ model CorrectionRule {
 
   @@index([tenantId, active])
   @@map("correction_rules")
+}
+
+model SuperAdmin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("super_admins")
+}
+
+model AuditLog {
+  id         String    @id @default(uuid())
+  actorType  ActorType
+  actorId    String
+  action     String
+  targetType String
+  targetId   String
+  tenantId   String?
+  beforeData Json?
+  afterData  Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([actorType, actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  actorType ActorType
+  actorId   String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([actorType, actorId])
+  @@map("password_reset_tokens")
 }
