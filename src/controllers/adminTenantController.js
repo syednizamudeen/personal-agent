@@ -39,7 +39,7 @@ async function updateTenant(req, res) {
   const existing = await prisma.tenant.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: 'Tenant not found' });
 
-  const { name, rateLimitHours, status } = req.body;
+  const { name, rateLimitHours, status, loginEmail } = req.body;
   const data = {};
   const beforeData = {};
   const afterData = {};
@@ -56,12 +56,17 @@ async function updateTenant(req, res) {
     data.status = status;
     beforeData.status = existing.status;
   }
+  if (loginEmail !== undefined) {
+    data.loginEmail = loginEmail;
+    beforeData.loginEmail = existing.loginEmail;
+  }
 
   const updated = await prisma.tenant.update({ where: { id: req.params.id }, data });
 
   if (name !== undefined) afterData.name = updated.name;
   if (rateLimitHours !== undefined) afterData.rateLimitHours = updated.rateLimitHours;
   if (status !== undefined) afterData.status = updated.status;
+  if (loginEmail !== undefined) afterData.loginEmail = updated.loginEmail;
 
   await writeAuditLog({
     actorType: 'SUPER_ADMIN',

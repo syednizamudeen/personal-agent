@@ -60,6 +60,22 @@ describe('adminTenantController', () => {
     );
   });
 
+  it('updates a tenant loginEmail and writes a before/after audit log', async () => {
+    prisma.tenant.findUnique.mockResolvedValue({ id: 't1', loginEmail: 'old@example.com' });
+    prisma.tenant.update.mockResolvedValue({ id: 't1', loginEmail: 'new@example.com' });
+    const { req, res } = mockReqRes({ params: { id: 't1' }, body: { loginEmail: 'new@example.com' } });
+    await updateTenant(req, res);
+    expect(prisma.tenant.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { loginEmail: 'new@example.com' } });
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'TENANT_UPDATED',
+        tenantId: 't1',
+        beforeData: { loginEmail: 'old@example.com' },
+        afterData: { loginEmail: 'new@example.com' },
+      })
+    );
+  });
+
   it('returns 404 when updating a nonexistent tenant', async () => {
     prisma.tenant.findUnique.mockResolvedValue(null);
     const { req, res } = mockReqRes({ params: { id: 'nope' }, body: { status: 'SUSPENDED' } });
