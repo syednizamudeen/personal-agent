@@ -2,15 +2,21 @@ const express = require('express');
 const { port } = require('./config/env');
 const logger = require('./config/logger');
 const apiRoutes = require('./routes/api');
+const { createSessionMiddleware } = require('./config/session');
+const portalRoutes = require('./routes/portal');
+const adminRoutes = require('./routes/admin');
 const { startMessageWorker } = require('./queues/messageQueue');
 const { startReplyWorker } = require('./queues/replyQueue');
 const { resumeActiveSessions } = require('./services/baileysManager');
 
 const app = express();
 app.use(express.json({ limit: '15mb' })); // headroom for base64-encoded WhatsApp images
+app.use(createSessionMiddleware());
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 app.use('/api/v1', apiRoutes);
+app.use('/api/v1/portal', portalRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 app.use((err, req, res, next) => {
   logger.error({ err }, 'Unhandled request error');
