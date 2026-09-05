@@ -1,6 +1,8 @@
 const express = require('express');
 const prisma = require('../db/prisma');
-const { verifyPassword } = require('../services/authService');
+const { verifyPassword, hashPassword } = require('../services/authService');
+const { issueResetToken, consumeResetToken } = require('../services/passwordResetService');
+const { sendPasswordResetEmail } = require('../services/emailService');
 const requireSuperAdmin = require('../middleware/requireSuperAdmin');
 
 const router = express.Router();
@@ -25,6 +27,28 @@ router.post('/logout', (req, res) => {
 
 router.get('/me', requireSuperAdmin, (req, res) => {
   res.json({ id: req.superAdmin.id, email: req.superAdmin.email, name: req.superAdmin.name });
+});
+
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  const superAdmin = await prisma.superAdmin.findUnique({ where: { email } });
+  if (superAdmin) {
+    const token = await issueResetToken('SUPER_ADMIN', superAdmin.id);
+    const resetUrl = `${req.headers.origin || ''}/admin/reset-password?token=${token}`;
+    await sendPasswordResetEmail(superAdmin.email, resetUrl);
+  }
+  res.json({ ok: true });
+});
+
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+  const result = await consumeResetToken(token);
+  if (!result || result.actorType !== 'SUPER_ADMIN') {
+    return res.status(400).json({ error: 'Invalid or expired token' });
+  }
+  const passwordHash = await hashPassword(password);
+  await prisma.superAdmin.update({ where: { id: result.actorId }, data: { passwordHash } });
+  res.json({ ok: true });
 });
 
 module.exports = router;
