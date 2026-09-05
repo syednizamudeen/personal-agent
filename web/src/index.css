@@ -1,6 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4: this single import is what loads the default theme (spacing scale,
+   font sizes, radii, ...). The v3 `@tailwind base/components/utilities` directives
+   do NOT load it, which silently dropped every default-theme utility from the build. */
+@import "tailwindcss";
 
 @config "../tailwind.config.js";
 
