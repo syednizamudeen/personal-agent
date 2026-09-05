@@ -80,8 +80,22 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma3:4b}
       PORT: 3000
       LOG_LEVEL: info
+      SESSION_SECRET: ${SESSION_SECRET}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-no-reply@localhost}
     ports:
       - "3000:3000"
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "8080:80"
 
 volumes:
   postgres_data:
