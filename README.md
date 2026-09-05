@@ -248,3 +248,70 @@ presence update, then a typing delay proportional to reply length (40-70ms/
 char with Gaussian jitter) before the message is actually sent. Per-contact
 rate limiting (`Tenant.rateLimitHours`) additionally caps auto-replies to one
 per contact per configured window.
+
+## Admin & tenant web portals
+
+Alongside the curl/API-key flow above, there's now a browser-based web
+portal, served by its own Docker service:
+
+```
+http://localhost:8080
+```
+
+It's an nginx container (`web` service in `docker-compose.yml`) that serves a
+built single-page app and reverse-proxies `/api/*` to the existing `app`
+container internally — you don't need to expose port 3000 to use it, though
+direct API access on port 3000 still works unchanged. Bring it up the same
+way as everything else:
+
+```bash
+docker compose up -d --build
+```
+
+### Creating the first super-admin
+
+There's no default admin account and none is auto-created on boot. Create
+one with the one-time CLI script:
+
+```bash
+docker compose exec app node scripts/create-super-admin.js \
+  --email=you@example.com --password=<choose-a-password> --name="Your Name"
+```
+
+(Or `npm run create-admin -- --email=... --password=...` for a local,
+non-Docker setup.) Running it again with an email that already exists exits
+with an error rather than creating a duplicate. Log in at
+`http://localhost:8080/admin/login`.
+
+### Tenant login
+
+Tenants log in separately at `http://localhost:8080/portal/login`, using
+`Tenant.loginEmail` / a password — not the `x-api-key` header used by the
+curl flow. **Onboarding path:** a super-admin creates the tenant first
+(`POST /admin/tenants` only takes `name`/`rateLimitHours` — it does not
+accept a password, or currently even a login email, directly), then uses
+**"Send password reset"** in the admin portal so the tenant sets their own
+password via emailed link.
+
+Note: as of this writing, no admin endpoint actually sets
+`Tenant.loginEmail` either (`POST /admin/tenants` and
+`PATCH /admin/tenants/:id` both omit it) — "Send password reset" will 400
+with `Tenant has no login email set` until that column is populated
+directly in the database for a given tenant. This is a known gap (see
+`CLAUDE.md`), not something to work around in normal usage today.
+
+### Environment variables for the portals
+
+Set these in `.env` alongside the existing ones:
+
+```bash
+SESSION_SECRET="a-long-random-string"   # required — signs portal/admin session cookies
+
+# Optional — email is best-effort; if unset, password-reset and
+# disconnect-alert emails are skipped with a warning, nothing crashes.
+SMTP_HOST=""
+SMTP_PORT=587
+SMTP_USER=""
+SMTP_PASS=""
+EMAIL_FROM="no-reply@yourdomain.com"
+```
