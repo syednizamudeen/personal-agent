@@ -46,7 +46,22 @@ describe('portal password reset', () => {
     const res = await request(buildApp()).post('/portal/forgot-password').send({ email: 'x@y.com' });
     expect(res.status).toBe(200);
     expect(issueResetToken).toHaveBeenCalledWith('TENANT', 't1');
-    expect(sendPasswordResetEmail).toHaveBeenCalledWith('x@y.com', expect.stringContaining('raw-token'));
+    expect(sendPasswordResetEmail).toHaveBeenCalledWith(
+      'x@y.com',
+      'http://localhost:8080/portal/reset-password?token=raw-token'
+    );
+  });
+
+  it('builds the reset link from APP_BASE_URL, ignoring an attacker-supplied Origin header', async () => {
+    prisma.tenant.findUnique.mockResolvedValue({ id: 't1', loginEmail: 'x@y.com' });
+    issueResetToken.mockResolvedValue('raw-token');
+    await request(buildApp())
+      .post('/portal/forgot-password')
+      .set('Origin', 'https://evil.example.com')
+      .send({ email: 'x@y.com' });
+    const [, resetUrl] = sendPasswordResetEmail.mock.calls[0];
+    expect(resetUrl).not.toContain('evil.example.com');
+    expect(resetUrl).toBe('http://localhost:8080/portal/reset-password?token=raw-token');
   });
 
   it('POST /reset-password rejects an invalid/expired token', async () => {

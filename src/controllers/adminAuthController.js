@@ -4,6 +4,7 @@ const { verifyPassword, hashPassword } = require('../services/authService');
 const { issueResetToken, consumeResetToken } = require('../services/passwordResetService');
 const { sendPasswordResetEmail } = require('../services/emailService');
 const requireSuperAdmin = require('../middleware/requireSuperAdmin');
+const { appBaseUrl } = require('../config/env');
 
 const router = express.Router();
 
@@ -34,7 +35,7 @@ router.post('/forgot-password', async (req, res) => {
   const superAdmin = await prisma.superAdmin.findUnique({ where: { email } });
   if (superAdmin) {
     const token = await issueResetToken('SUPER_ADMIN', superAdmin.id);
-    const resetUrl = `${req.headers.origin || ''}/admin/reset-password?token=${token}`;
+    const resetUrl = `${appBaseUrl}/admin/reset-password?token=${token}`;
     await sendPasswordResetEmail(superAdmin.email, resetUrl);
   }
   res.json({ ok: true });

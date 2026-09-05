@@ -2,6 +2,7 @@ const prisma = require('../db/prisma');
 const { writeAuditLog } = require('../services/auditService');
 const { issueResetToken } = require('../services/passwordResetService');
 const { sendPasswordResetEmail } = require('../services/emailService');
+const { appBaseUrl } = require('../config/env');
 
 async function listTenants(req, res) {
   const { limit } = req.query;
@@ -86,7 +87,7 @@ async function sendTenantPasswordReset(req, res) {
   if (!tenant?.loginEmail) return res.status(400).json({ error: 'Tenant has no login email set' });
 
   const token = await issueResetToken('TENANT', tenant.id);
-  const resetUrl = `${req.headers.origin || ''}/portal/reset-password?token=${token}`;
+  const resetUrl = `${appBaseUrl}/portal/reset-password?token=${token}`;
   await sendPasswordResetEmail(tenant.loginEmail, resetUrl);
   await writeAuditLog({
     actorType: 'SUPER_ADMIN',

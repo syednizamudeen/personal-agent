@@ -86,9 +86,13 @@ describe('adminTenantController', () => {
   it('sends a password reset for a tenant and audits it', async () => {
     prisma.tenant.findUnique.mockResolvedValue({ id: 't1', loginEmail: 'x@y.com' });
     issueResetToken.mockResolvedValue('raw-token');
-    const { req, res } = mockReqRes({ params: { id: 't1' }, headers: { origin: 'https://app.example.com' } });
+    // Origin is attacker-controlled and must be ignored in favour of APP_BASE_URL.
+    const { req, res } = mockReqRes({ params: { id: 't1' }, headers: { origin: 'https://evil.example.com' } });
     await sendTenantPasswordReset(req, res);
-    expect(sendPasswordResetEmail).toHaveBeenCalledWith('x@y.com', expect.stringContaining('raw-token'));
+    expect(sendPasswordResetEmail).toHaveBeenCalledWith(
+      'x@y.com',
+      'http://localhost:8080/portal/reset-password?token=raw-token'
+    );
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'TENANT_PASSWORD_RESET_TRIGGERED', tenantId: 't1' })
     );

@@ -309,6 +309,10 @@ Set these in `.env` alongside the existing ones:
 ```bash
 SESSION_SECRET="a-long-random-string"   # required — signs portal/admin session cookies
 
+# required — public origin of the web portal. Password-reset links are built from
+# this value, never from the request's Origin header (which the caller controls).
+APP_BASE_URL="http://localhost:8080"
+
 # Optional — email is best-effort; if unset, password-reset and
 # disconnect-alert emails are skipped with a warning, nothing crashes.
 SMTP_HOST=""

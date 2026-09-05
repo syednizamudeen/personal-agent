@@ -4,6 +4,7 @@ const { verifyPassword, hashPassword } = require('../services/authService');
 const { issueResetToken, consumeResetToken } = require('../services/passwordResetService');
 const { sendPasswordResetEmail } = require('../services/emailService');
 const requireTenantSession = require('../middleware/requireTenantSession');
+const { appBaseUrl } = require('../config/env');
 
 const router = express.Router();
 
@@ -37,7 +38,7 @@ router.post('/forgot-password', async (req, res) => {
   const tenant = await prisma.tenant.findUnique({ where: { loginEmail: email } });
   if (tenant) {
     const token = await issueResetToken('TENANT', tenant.id);
-    const resetUrl = `${req.headers.origin || ''}/portal/reset-password?token=${token}`;
+    const resetUrl = `${appBaseUrl}/portal/reset-password?token=${token}`;
     await sendPasswordResetEmail(tenant.loginEmail, resetUrl);
   }
   res.json({ ok: true });
