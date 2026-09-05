@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SessionStatus {
+  PENDING_QR
+  CONNECTED
+  DISCONNECTED
+  LOGGED_OUT
+}
+
+enum MessageStatus {
+  RECEIVED
+  AUTO_REPLIED
+  FLAGGED_FOR_REVIEW
+  SKIPPED
+}
+
+enum RuleAction {
+  SKIP_REPLY
+  FORCE_GREETING
+  FORCE_CATEGORY
+}
+
+model Tenant {
+  id              String   @id @default(uuid())
+  name            String
+  apiKey          String   @unique @default(uuid())
+  rateLimitHours  Int      @default(24)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sessions        WhatsAppSession[]
+  messageLogs     MessageLog[]
+  correctionRules CorrectionRule[]
+
+  @@map("tenants")
+}
+
+model WhatsAppSession {
+  id          String        @id @default(uuid())
+  tenantId    String
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  label       String?
+  status      SessionStatus @default(PENDING_QR)
+  phoneNumber String?
+  qrCode      String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([tenantId, id])
+  @@map("whatsapp_sessions")
+}
+
+model MessageLog {
+  id                String        @id @default(uuid())
+  tenantId          String
+  tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessionId         String
+  remoteJid         String
+  direction         String        @default("INBOUND")
+  messageType       String
+  rawText           String?
+  mediaBase64       String?       @db.Text
+  isGreetingOrWish  Boolean?
+  isForwardedContent Boolean?
+  confidenceScore   Float?
+  detectedLanguage  String?
+  suggestedReply    String?
+  finalReply        String?
+  matchedRuleId     String?
+  status            MessageStatus @default(RECEIVED)
+  reviewedByAdmin   Boolean       @default(false)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([tenantId, remoteJid])
+  @@index([tenantId, status])
+  @@map("message_logs")
+}
+
+model CorrectionRule {
+  id          String     @id @default(uuid())
+  tenantId    String
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pattern     String
+  isRegex     Boolean    @default(true)
+  action      RuleAction
+  forcedReply String?
+  category    String?
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([tenantId, active])
+  @@map("correction_rules")
+}
