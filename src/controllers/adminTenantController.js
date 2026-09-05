@@ -66,6 +66,11 @@ async function updateTenant(req, res) {
   if (!existing) return res.status(404).json({ error: 'Tenant not found' });
 
   const { name, rateLimitHours, status, loginEmail } = req.body;
+  const validStatuses = ['ACTIVE', 'SUSPENDED'];
+  if (status !== undefined && !validStatuses.includes(status)) {
+    return res.status(400).json({ error: `status must be one of ${validStatuses.join(', ')}` });
+  }
+
   const data = {};
   const beforeData = {};
   const afterData = {};

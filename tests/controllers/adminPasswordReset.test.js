@@ -79,6 +79,19 @@ describe('admin password reset', () => {
     expect(prisma.superAdmin.update).toHaveBeenCalledWith({ where: { id: 'admin-1' }, data: { passwordHash: 'new-hash' } });
   });
 
+  it('POST /reset-password rejects a missing password before hashing it', async () => {
+    const res = await request(buildApp()).post('/admin/reset-password').send({ token: 'good' });
+    expect(res.status).toBe(400);
+    expect(hashPassword).not.toHaveBeenCalled();
+    expect(consumeResetToken).not.toHaveBeenCalled();
+  });
+
+  it('POST /reset-password rejects a password shorter than 8 characters', async () => {
+    const res = await request(buildApp()).post('/admin/reset-password').send({ token: 'good', password: 'short' });
+    expect(res.status).toBe(400);
+    expect(hashPassword).not.toHaveBeenCalled();
+  });
+
   it('POST /reset-password rejects a TENANT token (cross-role security)', async () => {
     consumeResetToken.mockResolvedValue({ actorType: 'TENANT', actorId: 't1' });
     const res = await request(buildApp()).post('/admin/reset-password').send({ token: 'tenant-token', password: 'newpass123' });

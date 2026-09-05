@@ -23,6 +23,12 @@ async function createTenantCorrection(req, res) {
   const { pattern, isRegex, action, forcedReply, category } = req.body;
   if (!pattern || !action) return res.status(400).json({ error: 'pattern and action are required' });
 
+  // Mirrors the validation in reviewController.createCorrection.
+  const validActions = ['SKIP_REPLY', 'FORCE_GREETING', 'FORCE_CATEGORY'];
+  if (!validActions.includes(action)) {
+    return res.status(400).json({ error: `action must be one of ${validActions.join(', ')}` });
+  }
+
   const rule = await prisma.correctionRule.create({
     data: { tenantId, pattern, isRegex: isRegex ?? true, action, forcedReply: forcedReply ?? null, category: category ?? null },
   });

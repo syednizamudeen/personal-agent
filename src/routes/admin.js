@@ -1,6 +1,7 @@
 const express = require('express');
 const adminAuthController = require('../controllers/adminAuthController');
 const requireSuperAdmin = require('../middleware/requireSuperAdmin');
+const asyncHandler = require('../middleware/asyncHandler');
 const adminTenantController = require('../controllers/adminTenantController');
 const adminTenantDataController = require('../controllers/adminTenantDataController');
 const adminAuditController = require('../controllers/adminAuditController');
@@ -10,24 +11,24 @@ const adminSuperAdminController = require('../controllers/adminSuperAdminControl
 const router = express.Router();
 router.use('/', adminAuthController);
 
-router.use(requireSuperAdmin);
+router.use(asyncHandler(requireSuperAdmin));
 
-router.get('/tenants', adminTenantController.listTenants);
-router.post('/tenants', adminTenantController.createTenant);
-router.get('/tenants/:id', adminTenantController.getTenant);
-router.patch('/tenants/:id', adminTenantController.updateTenant);
-router.post('/tenants/:id/send-password-reset', adminTenantController.sendTenantPasswordReset);
+router.get('/tenants', asyncHandler(adminTenantController.listTenants));
+router.post('/tenants', asyncHandler(adminTenantController.createTenant));
+router.get('/tenants/:id', asyncHandler(adminTenantController.getTenant));
+router.patch('/tenants/:id', asyncHandler(adminTenantController.updateTenant));
+router.post('/tenants/:id/send-password-reset', asyncHandler(adminTenantController.sendTenantPasswordReset));
 
-router.get('/tenants/:id/messages', adminTenantDataController.listTenantMessages);
-router.get('/tenants/:id/corrections', adminTenantDataController.listTenantCorrections);
-router.post('/tenants/:id/corrections', adminTenantDataController.createTenantCorrection);
-router.delete('/tenants/:id/corrections/:ruleId', adminTenantDataController.deleteTenantCorrection);
-router.get('/tenants/:id/sessions', adminTenantDataController.listTenantSessions);
-router.post('/tenants/:id/sessions/:sessionId/reconnect', adminTenantDataController.reconnectTenantSession);
+router.get('/tenants/:id/messages', asyncHandler(adminTenantDataController.listTenantMessages));
+router.get('/tenants/:id/corrections', asyncHandler(adminTenantDataController.listTenantCorrections));
+router.post('/tenants/:id/corrections', asyncHandler(adminTenantDataController.createTenantCorrection));
+router.delete('/tenants/:id/corrections/:ruleId', asyncHandler(adminTenantDataController.deleteTenantCorrection));
+router.get('/tenants/:id/sessions', asyncHandler(adminTenantDataController.listTenantSessions));
+router.post('/tenants/:id/sessions/:sessionId/reconnect', asyncHandler(adminTenantDataController.reconnectTenantSession));
 
-router.get('/audit-logs', adminAuditController.listAuditLogs);
-router.get('/super-admins', adminSuperAdminController.listSuperAdmins);
-router.post('/super-admins', adminSuperAdminController.createSuperAdmin);
-router.get('/system/health', adminHealthController.getSystemHealth);
+router.get('/audit-logs', asyncHandler(adminAuditController.listAuditLogs));
+router.get('/super-admins', asyncHandler(adminSuperAdminController.listSuperAdmins));
+router.post('/super-admins', asyncHandler(adminSuperAdminController.createSuperAdmin));
+router.get('/system/health', asyncHandler(adminHealthController.getSystemHealth));
 
 module.exports = router;

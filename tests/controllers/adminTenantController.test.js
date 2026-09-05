@@ -108,6 +108,14 @@ describe('adminTenantController', () => {
     );
   });
 
+  it('rejects an unknown status with a 400 before touching the database', async () => {
+    prisma.tenant.findUnique.mockResolvedValue({ id: 't1', status: 'ACTIVE' });
+    const { req, res } = mockReqRes({ params: { id: 't1' }, body: { status: 'BANANA' } });
+    await updateTenant(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(prisma.tenant.update).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when updating a nonexistent tenant', async () => {
     prisma.tenant.findUnique.mockResolvedValue(null);
     const { req, res } = mockReqRes({ params: { id: 'nope' }, body: { status: 'SUSPENDED' } });

@@ -47,6 +47,13 @@ describe('adminTenantDataController', () => {
     );
   });
 
+  it('rejects an unknown correction action with a 400', async () => {
+    const { req, res } = mockReqRes({ params: { id: 't1' }, body: { pattern: 'rip', action: 'DELETE_EVERYTHING' } });
+    await createTenantCorrection(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(prisma.correctionRule.create).not.toHaveBeenCalled();
+  });
+
   it('reconnects a tenant session and audits it', async () => {
     const { req, res } = mockReqRes({ params: { id: 't1', sessionId: 's1' } });
     await reconnectTenantSession(req, res);

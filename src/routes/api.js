@@ -2,11 +2,12 @@ const express = require('express');
 const prisma = require('../db/prisma');
 const sessionController = require('../controllers/sessionController');
 const reviewController = require('../controllers/reviewController');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
 // Tenant onboarding has no tenant context yet, so it's exempt from the auth gate below.
-router.post('/tenants', sessionController.createTenant);
+router.post('/tenants', asyncHandler(sessionController.createTenant));
 
 async function requireTenant(req, res, next) {
   const apiKey = req.header('x-api-key');
@@ -19,15 +20,15 @@ async function requireTenant(req, res, next) {
   next();
 }
 
-router.use(requireTenant);
+router.use(asyncHandler(requireTenant));
 
-router.post('/sessions', sessionController.createSession);
-router.get('/sessions/:sessionId', sessionController.getSessionStatus);
+router.post('/sessions', asyncHandler(sessionController.createSession));
+router.get('/sessions/:sessionId', asyncHandler(sessionController.getSessionStatus));
 
-router.get('/messages', sessionController.listMessageLogs);
+router.get('/messages', asyncHandler(sessionController.listMessageLogs));
 
-router.post('/corrections', reviewController.createCorrection);
-router.get('/corrections', reviewController.listCorrections);
-router.delete('/corrections/:ruleId', reviewController.deleteCorrection);
+router.post('/corrections', asyncHandler(reviewController.createCorrection));
+router.get('/corrections', asyncHandler(reviewController.listCorrections));
+router.delete('/corrections/:ruleId', asyncHandler(reviewController.deleteCorrection));
 
 module.exports = router;

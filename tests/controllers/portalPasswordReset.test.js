@@ -87,6 +87,19 @@ describe('portal password reset', () => {
     expect(prisma.tenant.update).not.toHaveBeenCalled();
   });
 
+  it('POST /reset-password rejects a missing password before hashing it', async () => {
+    const res = await request(buildApp()).post('/portal/reset-password').send({ token: 'good' });
+    expect(res.status).toBe(400);
+    expect(hashPassword).not.toHaveBeenCalled();
+    expect(consumeResetToken).not.toHaveBeenCalled();
+  });
+
+  it('POST /reset-password rejects a password shorter than 8 characters', async () => {
+    const res = await request(buildApp()).post('/portal/reset-password').send({ token: 'good', password: 'short' });
+    expect(res.status).toBe(400);
+    expect(hashPassword).not.toHaveBeenCalled();
+  });
+
   it('PATCH /change-password requires authentication', async () => {
     const app = buildApp();
     const res = await request(app).patch('/portal/change-password').send({ currentPassword: 'old', newPassword: 'new' });
@@ -108,7 +121,7 @@ describe('portal password reset', () => {
     await agent.post('/portal/login').send({ email: 'test@y.com', password: 'pass' });
 
     verifyPassword.mockResolvedValueOnce(false);
-    const res = await agent.patch('/portal/change-password').send({ currentPassword: 'wrong', newPassword: 'new123' });
+    const res = await agent.patch('/portal/change-password').send({ currentPassword: 'wrong', newPassword: 'newpass123' });
     expect(res.status).toBe(401);
     expect(res.body.error).toMatch(/current password is incorrect/i);
     expect(prisma.tenant.update).not.toHaveBeenCalled();

@@ -1,25 +1,29 @@
 const express = require('express');
 const portalAuthController = require('../controllers/portalAuthController');
 const requireTenantSession = require('../middleware/requireTenantSession');
+const asyncHandler = require('../middleware/asyncHandler');
 const sessionController = require('../controllers/sessionController');
 const reviewController = require('../controllers/reviewController');
 
 const router = express.Router();
 router.use('/', portalAuthController);
 
-router.use(requireTenantSession);
+router.use(asyncHandler(requireTenantSession));
 
-router.post('/sessions', sessionController.createSession);
-router.get('/sessions', sessionController.listSessions);
-router.get('/sessions/:sessionId', sessionController.getSessionStatus);
-router.post('/sessions/:sessionId/reconnect', async (req, res) => {
-  const { reconnectSession } = require('../services/baileysManager');
-  await reconnectSession(req.tenant.id, req.params.sessionId);
-  res.json({ ok: true });
-});
-router.get('/messages', sessionController.listMessageLogs);
-router.get('/corrections', reviewController.listCorrections);
-router.post('/corrections', reviewController.createCorrection);
-router.delete('/corrections/:ruleId', reviewController.deleteCorrection);
+router.post('/sessions', asyncHandler(sessionController.createSession));
+router.get('/sessions', asyncHandler(sessionController.listSessions));
+router.get('/sessions/:sessionId', asyncHandler(sessionController.getSessionStatus));
+router.post(
+  '/sessions/:sessionId/reconnect',
+  asyncHandler(async (req, res) => {
+    const { reconnectSession } = require('../services/baileysManager');
+    await reconnectSession(req.tenant.id, req.params.sessionId);
+    res.json({ ok: true });
+  })
+);
+router.get('/messages', asyncHandler(sessionController.listMessageLogs));
+router.get('/corrections', asyncHandler(reviewController.listCorrections));
+router.post('/corrections', asyncHandler(reviewController.createCorrection));
+router.delete('/corrections/:ruleId', asyncHandler(reviewController.deleteCorrection));
 
 module.exports = router;
