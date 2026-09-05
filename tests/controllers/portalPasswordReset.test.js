@@ -63,4 +63,62 @@ describe('portal password reset', () => {
     expect(res.status).toBe(200);
     expect(prisma.tenant.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { passwordHash: 'new-hash' } });
   });
+
+  it('POST /reset-password rejects a SUPER_ADMIN token (cross-role security)', async () => {
+    consumeResetToken.mockResolvedValue({ actorType: 'SUPER_ADMIN', actorId: 'admin-1' });
+    const res = await request(buildApp()).post('/portal/reset-password').send({ token: 'admin-token', password: 'newpass123' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid or expired/i);
+    expect(prisma.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('PATCH /change-password requires authentication', async () => {
+    const app = buildApp();
+    const res = await request(app).patch('/portal/change-password').send({ currentPassword: 'old', newPassword: 'new' });
+    expect(res.status).toBe(401);
+  });
+
+  it('PATCH /change-password rejects wrong current password', async () => {
+    const { verifyPassword } = require('../../src/services/authService');
+    const app = buildApp();
+    const agent = request.agent(app);
+
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: 't1',
+      loginEmail: 'test@y.com',
+      passwordHash: 'old-hash',
+      status: 'ACTIVE',
+    });
+    verifyPassword.mockResolvedValueOnce(true);
+    await agent.post('/portal/login').send({ email: 'test@y.com', password: 'pass' });
+
+    verifyPassword.mockResolvedValueOnce(false);
+    const res = await agent.patch('/portal/change-password').send({ currentPassword: 'wrong', newPassword: 'new123' });
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/current password is incorrect/i);
+    expect(prisma.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('PATCH /change-password updates password with correct current password', async () => {
+    const { verifyPassword } = require('../../src/services/authService');
+    const app = buildApp();
+    const agent = request.agent(app);
+
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: 't1',
+      loginEmail: 'test@y.com',
+      passwordHash: 'old-hash',
+      status: 'ACTIVE',
+    });
+    verifyPassword.mockResolvedValueOnce(true);
+    await agent.post('/portal/login').send({ email: 'test@y.com', password: 'pass' });
+
+    verifyPassword.mockResolvedValueOnce(true);
+    hashPassword.mockResolvedValue('new-hash');
+    prisma.tenant.update.mockResolvedValue({});
+
+    const res = await agent.patch('/portal/change-password').send({ currentPassword: 'oldpass123', newPassword: 'newpass123' });
+    expect(res.status).toBe(200);
+    expect(prisma.tenant.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { passwordHash: 'new-hash' } });
+  });
 });
