@@ -3,6 +3,8 @@ const adminAuthController = require('../controllers/adminAuthController');
 const requireSuperAdmin = require('../middleware/requireSuperAdmin');
 const adminTenantController = require('../controllers/adminTenantController');
 const adminTenantDataController = require('../controllers/adminTenantDataController');
+const adminAuditController = require('../controllers/adminAuditController');
+const adminHealthController = require('../controllers/adminHealthController');
 
 const router = express.Router();
 router.use('/', adminAuthController);
@@ -21,5 +23,8 @@ router.post('/tenants/:id/corrections', adminTenantDataController.createTenantCo
 router.delete('/tenants/:id/corrections/:ruleId', adminTenantDataController.deleteTenantCorrection);
 router.get('/tenants/:id/sessions', adminTenantDataController.listTenantSessions);
 router.post('/tenants/:id/sessions/:sessionId/reconnect', adminTenantDataController.reconnectTenantSession);
+
+router.get('/audit-logs', adminAuditController.listAuditLogs);
+router.get('/system/health', adminHealthController.getSystemHealth);
 
 module.exports = router;
