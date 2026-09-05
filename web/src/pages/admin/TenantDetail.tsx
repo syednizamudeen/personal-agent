@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/apiClient';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { Table, Th, Td } from '../../components/ui/Table';
 
 interface Tenant {
@@ -21,6 +23,8 @@ interface WhatsAppSession {
 export function TenantDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  // null = untouched, so the field tracks the server value until the admin edits it
+  const [emailDraft, setEmailDraft] = useState<string | null>(null);
 
   const { data: tenant } = useQuery<Tenant>({
     queryKey: ['admin', 'tenants', id],
@@ -38,6 +42,15 @@ export function TenantDetail() {
       apiFetch(`/admin/tenants/${id}`, {
         method: 'PATCH',
         body: JSON.stringify({ status: tenant?.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE' }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'tenants', id] }),
+  });
+
+  const saveLoginEmail = useMutation({
+    mutationFn: (value: string) =>
+      apiFetch(`/admin/tenants/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ loginEmail: value }),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'tenants', id] }),
   });
@@ -67,7 +80,28 @@ export function TenantDetail() {
             </Button>
           </div>
         </div>
-        <p className="text-muted text-sm mt-1">{tenant.loginEmail ?? 'No login email set'}</p>
+        <div className="mt-3">
+          <label htmlFor="loginEmail" className="text-muted text-sm block mb-1">
+            Login email
+          </label>
+          <div className="flex gap-2 items-start">
+            <Input
+              id="loginEmail"
+              type="email"
+              placeholder="No login email set"
+              value={emailDraft ?? tenant.loginEmail ?? ''}
+              onChange={(e) => setEmailDraft(e.target.value)}
+            />
+            <Button
+              onClick={() => saveLoginEmail.mutate(emailDraft ?? tenant.loginEmail ?? '')}
+              disabled={saveLoginEmail.isPending || emailDraft === null || emailDraft === (tenant.loginEmail ?? '')}
+            >
+              {saveLoginEmail.isPending ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+          {saveLoginEmail.isError && <p className="text-danger text-sm mt-1">Could not save the login email.</p>}
+          {saveLoginEmail.isSuccess && <p className="text-success text-sm mt-1">Login email saved.</p>}
+        </div>
       </Card>
 
       <Card>

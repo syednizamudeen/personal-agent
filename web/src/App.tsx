@@ -6,6 +6,8 @@ import { PortalLogin } from './pages/portal/PortalLogin';
 import { PortalDashboard } from './pages/portal/PortalDashboard';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { PortalResetPassword } from './pages/portal/PortalResetPassword';
+import { AdminResetPassword } from './pages/admin/AdminResetPassword';
 
 const queryClient = new QueryClient();
 
@@ -31,6 +33,8 @@ export function App() {
               <Route path="/" element={<Navigate to="/portal/login" replace />} />
               <Route path="/portal/login" element={<PortalLogin />} />
               <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/portal/reset-password" element={<PortalResetPassword />} />
+              <Route path="/admin/reset-password" element={<AdminResetPassword />} />
               <Route
                 path="/portal/*"
                 element={
