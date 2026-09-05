@@ -4,9 +4,23 @@ const { issueResetToken } = require('../services/passwordResetService');
 const { sendPasswordResetEmail } = require('../services/emailService');
 const { appBaseUrl } = require('../config/env');
 
+// passwordHash must never leave the server. apiKey stays: it is the credential a
+// super-admin hands to the tenant, and these routes are super-admin-only.
+const TENANT_PUBLIC_SELECT = {
+  id: true,
+  name: true,
+  apiKey: true,
+  rateLimitHours: true,
+  loginEmail: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
 async function listTenants(req, res) {
   const { limit } = req.query;
   const tenants = await prisma.tenant.findMany({
+    select: TENANT_PUBLIC_SELECT,
     orderBy: { createdAt: 'desc' },
     take: Math.min(parseInt(limit || '50', 10), 200),
   });
@@ -17,7 +31,10 @@ async function createTenant(req, res) {
   const { name, rateLimitHours } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
-  const tenant = await prisma.tenant.create({ data: { name, rateLimitHours: rateLimitHours ?? 24 } });
+  const tenant = await prisma.tenant.create({
+    data: { name, rateLimitHours: rateLimitHours ?? 24 },
+    select: TENANT_PUBLIC_SELECT,
+  });
   await writeAuditLog({
     actorType: 'SUPER_ADMIN',
     actorId: req.superAdmin.id,
@@ -25,19 +42,27 @@ async function createTenant(req, res) {
     targetType: 'Tenant',
     targetId: tenant.id,
     tenantId: tenant.id,
-    afterData: tenant,
+    // Field-picked: the raw row carries apiKey (and could carry passwordHash),
+    // and audit logs are readable by every super-admin via GET /admin/audit-logs.
+    afterData: { name: tenant.name, rateLimitHours: tenant.rateLimitHours },
   });
   res.status(201).json(tenant);
 }
 
 async function getTenant(req, res) {
-  const tenant = await prisma.tenant.findUnique({ where: { id: req.params.id } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: req.params.id },
+    select: TENANT_PUBLIC_SELECT,
+  });
   if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
   res.json(tenant);
 }
 
 async function updateTenant(req, res) {
-  const existing = await prisma.tenant.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.tenant.findUnique({
+    where: { id: req.params.id },
+    select: TENANT_PUBLIC_SELECT,
+  });
   if (!existing) return res.status(404).json({ error: 'Tenant not found' });
 
   const { name, rateLimitHours, status, loginEmail } = req.body;
@@ -62,7 +87,11 @@ async function updateTenant(req, res) {
     beforeData.loginEmail = existing.loginEmail;
   }
 
-  const updated = await prisma.tenant.update({ where: { id: req.params.id }, data });
+  const updated = await prisma.tenant.update({
+    where: { id: req.params.id },
+    data,
+    select: TENANT_PUBLIC_SELECT,
+  });
 
   if (name !== undefined) afterData.name = updated.name;
   if (rateLimitHours !== undefined) afterData.rateLimitHours = updated.rateLimitHours;
@@ -83,7 +112,10 @@ async function updateTenant(req, res) {
 }
 
 async function sendTenantPasswordReset(req, res) {
-  const tenant = await prisma.tenant.findUnique({ where: { id: req.params.id } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, loginEmail: true },
+  });
   if (!tenant?.loginEmail) return res.status(400).json({ error: 'Tenant has no login email set' });
 
   const token = await issueResetToken('TENANT', tenant.id);
