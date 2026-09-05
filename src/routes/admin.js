@@ -5,6 +5,7 @@ const adminTenantController = require('../controllers/adminTenantController');
 const adminTenantDataController = require('../controllers/adminTenantDataController');
 const adminAuditController = require('../controllers/adminAuditController');
 const adminHealthController = require('../controllers/adminHealthController');
+const adminSuperAdminController = require('../controllers/adminSuperAdminController');
 
 const router = express.Router();
 router.use('/', adminAuthController);
@@ -25,6 +26,8 @@ router.get('/tenants/:id/sessions', adminTenantDataController.listTenantSessions
 router.post('/tenants/:id/sessions/:sessionId/reconnect', adminTenantDataController.reconnectTenantSession);
 
 router.get('/audit-logs', adminAuditController.listAuditLogs);
+router.get('/super-admins', adminSuperAdminController.listSuperAdmins);
+router.post('/super-admins', adminSuperAdminController.createSuperAdmin);
 router.get('/system/health', adminHealthController.getSystemHealth);
 
 module.exports = router;
