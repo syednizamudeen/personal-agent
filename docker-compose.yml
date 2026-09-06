@@ -82,6 +82,8 @@ services:
       PORT: 3000
       LOG_LEVEL: info
       SESSION_SECRET: ${SESSION_SECRET}
+      # false for plain-HTTP local runs; set true once the portal is served over HTTPS.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}

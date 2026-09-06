@@ -43,8 +43,12 @@ const { createApp } = require('../src/app');
 
 const API_KEY_ERROR = 'x-api-key header is required';
 
-function buildApp() {
-  return createApp({ sessionStore: new session.MemoryStore() });
+function buildApp(opts = {}) {
+  return createApp({ sessionStore: new session.MemoryStore(), ...opts });
+}
+
+function setCookieHeader(res) {
+  return res.headers['set-cookie'] || [];
 }
 
 describe('composed app route mount order', () => {
@@ -154,6 +158,57 @@ describe('composed app route mount order', () => {
       .post('/api/v1/admin/super-admins')
       .send({ email: 'taken@b.com', password: 'pw-long-enough' });
     expect(res.status).toBe(409);
+  });
+
+  // A successful login used to return 200 with NO Set-Cookie at all: cookie.secure was
+  // derived from NODE_ENV, the Docker image pins NODE_ENV=production, and express-session
+  // silently declines to emit a Secure cookie over plain HTTP. The API looked healthy while
+  // no session was ever established, so the SPA bounced straight back to the login screen.
+  describe('session cookie emission', () => {
+    beforeEach(() => {
+      prisma.superAdmin.findUnique.mockResolvedValue({ id: 'admin-1', email: 'a@b.com' });
+      verifyPassword.mockResolvedValue(true);
+    });
+
+    it('sets a session cookie on successful login over plain HTTP', async () => {
+      const res = await request(buildApp({ cookieSecure: false }))
+        .post('/api/v1/admin/login')
+        .send({ email: 'a@b.com', password: 'pw-long-enough' });
+
+      expect(res.status).toBe(200);
+      expect(setCookieHeader(res)).toHaveLength(1);
+      expect(setCookieHeader(res)[0]).not.toMatch(/Secure/i);
+    });
+
+    it('withholds the cookie over plain HTTP when secure cookies are required', async () => {
+      const res = await request(buildApp({ cookieSecure: true }))
+        .post('/api/v1/admin/login')
+        .send({ email: 'a@b.com', password: 'pw-long-enough' });
+
+      expect(res.status).toBe(200);
+      expect(setCookieHeader(res)).toHaveLength(0);
+    });
+
+    it('sets a Secure cookie when a trusted proxy reports an HTTPS hop', async () => {
+      const res = await request(buildApp({ cookieSecure: true }))
+        .post('/api/v1/admin/login')
+        .set('X-Forwarded-Proto', 'https')
+        .send({ email: 'a@b.com', password: 'pw-long-enough' });
+
+      expect(res.status).toBe(200);
+      expect(setCookieHeader(res)).toHaveLength(1);
+      expect(setCookieHeader(res)[0]).toMatch(/Secure/i);
+    });
+
+    it('keeps an authenticated session across requests', async () => {
+      prisma.tenant.findMany.mockResolvedValue([]);
+      const agent = request.agent(buildApp({ cookieSecure: false }));
+
+      await agent.post('/api/v1/admin/login').send({ email: 'a@b.com', password: 'pw-long-enough' });
+      const res = await agent.get('/api/v1/admin/tenants');
+
+      expect(res.status).toBe(200);
+    });
   });
 
   it('serves /health', async () => {

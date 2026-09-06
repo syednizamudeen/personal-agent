@@ -1,11 +1,11 @@
 const session = require('express-session');
 const connectRedis = require('connect-redis');
-const { sessionSecret } = require('./env');
+const { sessionSecret, sessionCookieSecure } = require('./env');
 const { createRedisConnection } = require('./redis');
 
 const RedisStore = connectRedis(session);
 
-function createSessionMiddleware(store) {
+function createSessionMiddleware(store, { secure = sessionCookieSecure } = {}) {
   return session({
     store: store || new RedisStore({ client: createRedisConnection(), prefix: 'sess:' }),
     secret: sessionSecret,
@@ -14,7 +14,7 @@ function createSessionMiddleware(store) {
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure,
       maxAge: 1000 * 60 * 60 * 24 * 7,
     },
   });

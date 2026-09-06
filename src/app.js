@@ -7,10 +7,14 @@ const adminRoutes = require('./routes/admin');
 
 // Composed Express app, kept separate from server.js so tests can boot the real
 // middleware/route stack (mount order included) without binding a port.
-function createApp({ sessionStore } = {}) {
+function createApp({ sessionStore, cookieSecure } = {}) {
   const app = express();
+  // The app always runs behind the nginx `web` container, which forwards
+  // X-Forwarded-Proto. Without this, express-session sees every request as plain
+  // HTTP and refuses to emit a Secure cookie even when TLS terminates upstream.
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '15mb' })); // headroom for base64-encoded WhatsApp images
-  app.use(createSessionMiddleware(sessionStore));
+  app.use(createSessionMiddleware(sessionStore, cookieSecure === undefined ? {} : { secure: cookieSecure }));
 
   app.get('/health', (req, res) => res.json({ ok: true }));
 

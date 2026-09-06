@@ -14,6 +14,12 @@ module.exports = {
   databaseUrl: process.env.DATABASE_URL,
   redisUrl: process.env.REDIS_URL,
   sessionSecret: process.env.SESSION_SECRET,
+  // Whether the session cookie carries the Secure flag. Explicit, NOT derived from
+  // NODE_ENV: the Docker image sets NODE_ENV=production even for local runs, and a
+  // Secure cookie is silently dropped by express-session over plain HTTP, which
+  // makes login return 200 while never establishing a session. Set to true only
+  // when the portal is actually served over HTTPS.
+  sessionCookieSecure: process.env.SESSION_COOKIE_SECURE === 'true',
   // Public origin of the web portal. Used to build password-reset links; never
   // derive these from the request's Origin header, which the caller controls.
   appBaseUrl: process.env.APP_BASE_URL.replace(/\/+$/, ''),

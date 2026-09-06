@@ -313,6 +313,13 @@ SESSION_SECRET="a-long-random-string"   # required — signs portal/admin sessio
 # this value, never from the request's Origin header (which the caller controls).
 APP_BASE_URL="http://localhost:8080"
 
+# Optional — defaults to false. Controls the Secure flag on the session cookie.
+# Leave false for plain-HTTP access (including the local Docker stack on
+# http://localhost:8080): a Secure cookie is silently dropped over HTTP, so login
+# returns 200 while no session is ever created and the portal appears to reject
+# valid credentials. Set to true only when the portal is served over HTTPS.
+SESSION_COOKIE_SECURE=false
+
 # Optional — email is best-effort; if unset, password-reset and
 # disconnect-alert emails are skipped with a warning, nothing crashes.
 SMTP_HOST=""
