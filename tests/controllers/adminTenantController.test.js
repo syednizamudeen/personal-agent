@@ -48,7 +48,7 @@ describe('adminTenantController', () => {
 
   it('creates a tenant and writes an audit log', async () => {
     prisma.tenant.create.mockResolvedValue({ id: 't1', name: 'Acme' });
-    const { req, res } = mockReqRes({ body: { name: 'Acme', rateLimitHours: 24 } });
+    const { req, res } = mockReqRes({ body: { name: 'Acme', rateLimitMinutes: 24 } });
     await createTenant(req, res);
     expect(res.status).toHaveBeenCalledWith(201);
     expect(writeAuditLog).toHaveBeenCalledWith(
@@ -60,16 +60,58 @@ describe('adminTenantController', () => {
     prisma.tenant.create.mockResolvedValue({
       id: 't1',
       name: 'Acme',
-      rateLimitHours: 24,
+      rateLimitMinutes: 24,
       apiKey: 'super-secret-key',
       passwordHash: 'hash',
     });
     const { req, res } = mockReqRes({ body: { name: 'Acme' } });
     await createTenant(req, res);
     const { afterData } = writeAuditLog.mock.calls[0][0];
-    expect(afterData).toEqual({ name: 'Acme', rateLimitHours: 24 });
+    expect(afterData).toEqual({ name: 'Acme', rateLimitMinutes: 24 });
     expect(JSON.stringify(afterData)).not.toContain('super-secret-key');
     expect(afterData.passwordHash).toBeUndefined();
+  });
+
+  it('defaults rateLimitMinutes to 1440 (24h) when the caller omits it', async () => {
+    prisma.tenant.create.mockResolvedValue({ id: 't1', name: 'Acme', rateLimitMinutes: 1440 });
+    const { req, res } = mockReqRes({ body: { name: 'Acme' } });
+    await createTenant(req, res);
+    expect(prisma.tenant.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { name: 'Acme', rateLimitMinutes: 1440 } })
+    );
+  });
+
+  it.each([
+    ['zero', 0],
+    ['negative', -5],
+    ['fractional', 1.5],
+    ['a string', '30'],
+  ])('rejects %s rateLimitMinutes on create', async (_label, value) => {
+    const { req, res } = mockReqRes({ body: { name: 'Acme', rateLimitMinutes: value } });
+    await createTenant(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(prisma.tenant.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid rateLimitMinutes on update without touching the row', async () => {
+    prisma.tenant.findUnique.mockResolvedValue({ id: 't1', rateLimitMinutes: 1440 });
+    const { req, res } = mockReqRes({ params: { id: 't1' }, body: { rateLimitMinutes: 0 } });
+    await updateTenant(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(prisma.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('updates rateLimitMinutes and records it in the audit log', async () => {
+    prisma.tenant.findUnique.mockResolvedValue({ id: 't1', rateLimitMinutes: 1440 });
+    prisma.tenant.update.mockResolvedValue({ id: 't1', rateLimitMinutes: 30 });
+    const { req, res } = mockReqRes({ params: { id: 't1' }, body: { rateLimitMinutes: 30 } });
+    await updateTenant(req, res);
+    expect(prisma.tenant.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { rateLimitMinutes: 30 } })
+    );
+    const { beforeData, afterData } = writeAuditLog.mock.calls[0][0];
+    expect(beforeData).toEqual({ rateLimitMinutes: 1440 });
+    expect(afterData).toEqual({ rateLimitMinutes: 30 });
   });
 
   it('updates a tenant status and writes a before/after audit log', async () => {

@@ -20,6 +20,20 @@ const redis = createRedisConnection();
 const activeSockets = new Map();
 
 async function startSession(tenantId, sessionId) {
+  // One live socket per tenant: Baileys auth state lives at tenant:<id>:auth:* and
+  // getSocket() resolves by tenantId, so a second concurrent socket would share one
+  // set of credentials with the first. Replace rather than run both in parallel.
+  const existing = activeSockets.get(tenantId);
+  if (existing) {
+    logger.warn({ tenantId, sessionId }, 'Replacing existing socket for tenant');
+    activeSockets.delete(tenantId);
+    try {
+      existing.end(undefined);
+    } catch (err) {
+      logger.warn({ err, tenantId }, 'Failed to close previous socket cleanly');
+    }
+  }
+
   const { state, saveCreds } = await useRedisAuthState(redis, tenantId);
 
   const sock = makeWASocket({
@@ -74,11 +88,19 @@ async function startSession(tenantId, sessionId) {
           data: { status: loggedOut ? 'LOGGED_OUT' : 'DISCONNECTED' },
         });
 
-        activeSockets.delete(tenantId);
+        // Only clear the tenant's slot if WE are still the socket occupying it.
+        // A superseded socket (a second session started for the same tenant) must
+        // not evict the live one, and must not reconnect itself: auth state is
+        // keyed per tenant, so two sockets share one set of creds and each
+        // reconnect kicks the other off in an endless war.
+        const isCurrent = activeSockets.get(tenantId) === sock;
+        if (isCurrent) activeSockets.delete(tenantId);
 
         if (loggedOut) {
           await clearAuthState(redis, tenantId);
           await notifyDisconnectIfNeeded(tenantId, sessionId);
+        } else if (!isCurrent) {
+          logger.warn({ tenantId, sessionId }, 'Superseded socket closed, not reconnecting');
         } else if (count === 0) {
           logger.warn({ tenantId, sessionId }, 'Session record gone, not reconnecting');
         } else {
@@ -149,10 +171,29 @@ function getSocket(tenantId) {
  */
 async function resumeActiveSessions() {
   const sessions = await prisma.whatsAppSession.findMany({
-    where: { status: { in: ['CONNECTED', 'PENDING_QR'] } },
+    // DISCONNECTED is included deliberately: it is a transient state (a network blip,
+    // or a process killed mid-connection), and the Redis creds are still intact, so the
+    // socket resumes with no QR scan. Only LOGGED_OUT is terminal — its creds are
+    // cleared, so it genuinely needs a human to re-link. Leaving DISCONNECTED out meant
+    // a session that dropped while the process was down stayed dead until someone
+    // noticed and clicked Reconnect.
+    where: { status: { in: ['CONNECTED', 'PENDING_QR', 'DISCONNECTED'] } },
+    orderBy: { createdAt: 'desc' },
   });
 
+  // At most one socket per tenant (shared per-tenant auth state). If a tenant somehow
+  // has several resumable rows, resume only the newest and leave the rest alone —
+  // starting both would have them fight over the same credentials.
+  const seen = new Set();
   for (const session of sessions) {
+    if (seen.has(session.tenantId)) {
+      logger.warn(
+        { tenantId: session.tenantId, sessionId: session.id },
+        'Skipping duplicate resumable session for tenant'
+      );
+      continue;
+    }
+    seen.add(session.tenantId);
     logger.info({ tenantId: session.tenantId, sessionId: session.id }, 'Resuming WhatsApp session on boot');
     startSession(session.tenantId, session.id).catch((err) => {
       logger.error({ err, tenantId: session.tenantId }, 'Failed to resume session on boot');

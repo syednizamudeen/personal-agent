@@ -31,7 +31,7 @@ function startMessageWorker() {
         return;
       }
 
-      if (await isRateLimited(tenantId, remoteJid, tenant.rateLimitHours)) {
+      if (await isRateLimited(tenantId, remoteJid, tenant.rateLimitMinutes)) {
         await prisma.messageLog.create({
           data: {
             tenantId,
@@ -83,8 +83,8 @@ function startMessageWorker() {
   );
 }
 
-async function isRateLimited(tenantId, remoteJid, rateLimitHours) {
-  const since = new Date(Date.now() - rateLimitHours * 60 * 60 * 1000);
+async function isRateLimited(tenantId, remoteJid, rateLimitMinutes) {
+  const since = new Date(Date.now() - rateLimitMinutes * 60 * 1000);
   const recentReply = await prisma.messageLog.findFirst({
     where: {
       tenantId,

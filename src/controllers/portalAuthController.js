@@ -40,7 +40,7 @@ router.post('/logout', (req, res) => {
 });
 
 router.get('/me', asyncHandler(requireTenantSession), (req, res) => {
-  res.json({ id: req.tenant.id, name: req.tenant.name, loginEmail: req.tenant.loginEmail, rateLimitHours: req.tenant.rateLimitHours });
+  res.json({ id: req.tenant.id, name: req.tenant.name, loginEmail: req.tenant.loginEmail, rateLimitMinutes: req.tenant.rateLimitMinutes });
 });
 
 router.post(

@@ -2,6 +2,7 @@ jest.mock('../../src/db/prisma', () => ({
   whatsAppSession: {
     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     findUnique: jest.fn(),
+    findMany: jest.fn(),
   },
   tenant: {
     findUnique: jest.fn(),
@@ -45,6 +46,89 @@ describe('reconnectSession', () => {
       data: { status: 'PENDING_QR', qrCode: null },
     });
     expect(makeWASocket).toHaveBeenCalled();
+  });
+});
+
+// Regression: a second session started for a tenant that already had one produced two
+// Baileys sockets sharing tenant-scoped credentials. Each close handler reconnected its
+// own socket, which knocked the other offline — 344 reconnect loops in 25 minutes live,
+// and the tenant's real WhatsApp connection never came back up.
+describe('one socket per tenant', () => {
+  // No jest.resetModules() here: the module-level activeSockets Map is the thing under
+  // test, so we clear it directly and keep the same mock instances the file captured.
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const { activeSockets } = require('../../src/services/baileysManager');
+    activeSockets.clear();
+    prisma.whatsAppSession.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  function makeFakeSocket() {
+    const handlers = {};
+    return {
+      sock: { ev: { on: (event, fn) => (handlers[event] = fn) }, end: jest.fn() },
+      fire: (event, payload) => handlers[event](payload),
+    };
+  }
+
+  it('ends the previous socket when a tenant starts another session', async () => {
+    const first = makeFakeSocket();
+    const second = makeFakeSocket();
+    makeWASocket.mockReturnValueOnce(first.sock).mockReturnValueOnce(second.sock);
+
+    const { startSession, activeSockets } = require('../../src/services/baileysManager');
+    await startSession('tenant-1', 'session-1');
+    await startSession('tenant-1', 'session-2');
+
+    expect(first.sock.end).toHaveBeenCalled();
+    expect(activeSockets.get('tenant-1')).toBe(second.sock);
+  });
+
+  it('does not reconnect a superseded socket when it closes', async () => {
+    const first = makeFakeSocket();
+    const second = makeFakeSocket();
+    makeWASocket.mockReturnValueOnce(first.sock).mockReturnValueOnce(second.sock);
+
+    const { startSession, activeSockets } = require('../../src/services/baileysManager');
+    await startSession('tenant-1', 'session-1');
+    await startSession('tenant-1', 'session-2');
+    makeWASocket.mockClear();
+
+    // The displaced socket closes, as it will right after being ended.
+    await first.fire('connection.update', { connection: 'close', lastDisconnect: { error: new Error('gone') } });
+
+    expect(makeWASocket).not.toHaveBeenCalled(); // no resurrection
+    expect(activeSockets.get('tenant-1')).toBe(second.sock); // live socket untouched
+  });
+
+  it('resumes DISCONNECTED sessions on boot but never LOGGED_OUT ones', async () => {
+    prisma.whatsAppSession.findMany.mockResolvedValue([]);
+    makeWASocket.mockReturnValue(makeFakeSocket().sock);
+
+    const { resumeActiveSessions } = require('../../src/services/baileysManager');
+    await resumeActiveSessions();
+
+    const { where } = prisma.whatsAppSession.findMany.mock.calls[0][0];
+    expect(where.status.in).toContain('DISCONNECTED');
+    expect(where.status.in).not.toContain('LOGGED_OUT'); // creds are cleared; needs a human
+  });
+
+  it('resumes only the newest session per tenant on boot', async () => {
+    prisma.whatsAppSession.findMany.mockResolvedValue([
+      { id: 'newer', tenantId: 'tenant-1', status: 'CONNECTED' },
+      { id: 'older', tenantId: 'tenant-1', status: 'CONNECTED' },
+      { id: 'other', tenantId: 'tenant-2', status: 'PENDING_QR' },
+    ]);
+    makeWASocket.mockReturnValue(makeFakeSocket().sock);
+
+    const { resumeActiveSessions } = require('../../src/services/baileysManager');
+    await resumeActiveSessions();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(prisma.whatsAppSession.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { createdAt: 'desc' } })
+    );
+    expect(makeWASocket).toHaveBeenCalledTimes(2); // one per tenant, not three
   });
 });
 

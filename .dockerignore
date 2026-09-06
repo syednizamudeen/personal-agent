@@ -1,0 +1,17 @@
+# Without this, the runner stage's `COPY . .` copies the host's node_modules over
+# the Prisma client generated in the builder stage. The stale client then ignores
+# every schema change — a rename shows up at runtime as
+# "Unknown argument `x`" 500s that a rebuild appears not to fix.
+node_modules
+web/node_modules
+web/dist
+
+.git
+.env
+.env.*
+!.env.example
+
+npm-debug.log*
+.DS_Store
+.superpowers
+coverage

@@ -143,19 +143,22 @@ business, or just you personally if you're running this as your own
 assistant. `name` is purely a human-readable label with no functional effect;
 call it whatever helps you tell tenants apart later.
 
-`rateLimitHours` is an anti-spam guardrail: once a contact has received one
+`rateLimitMinutes` is an anti-spam guardrail: once a contact has received one
 auto-reply, the pipeline won't auto-reply to that *same* contact again until
-this many hours have passed (checked in `src/queues/messageQueue.js` before
+this many minutes have passed (checked in `src/queues/messageQueue.js` before
 the message is even classified). It doesn't limit anything else — you can
 still send messages manually, and different contacts are rate-limited
-independently. `24` means at most one auto-reply per contact per day; use a
-smaller number for faster testing.
+independently. The default `1440` (24 hours) means at most one auto-reply per
+contact per day; use a smaller number for faster testing or chattier replies.
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/tenants \
   -H "Content-Type: application/json" \
-  -d '{"name": "My Personal Assistant", "rateLimitHours": 24}'
+  -d '{"name": "My Personal Assistant", "rateLimitMinutes": 1440}'
 ```
+
+Most people should use the admin portal instead of this curl — see
+[Onboarding from the admin portal](#onboarding-from-the-admin-portal-recommended).
 
 The response includes an `apiKey` (server-generated — you don't choose it).
 Copy that value; it's the `<TENANT_API_KEY>` used as the `x-api-key` header
@@ -246,7 +249,7 @@ The outgoing reply worker (`src/queues/replyQueue.js`) simulates human
 behavior before every send: mark-as-read, a random 2-5s pause, a "composing"
 presence update, then a typing delay proportional to reply length (40-70ms/
 char with Gaussian jitter) before the message is actually sent. Per-contact
-rate limiting (`Tenant.rateLimitHours`) additionally caps auto-replies to one
+rate limiting (`Tenant.rateLimitMinutes`) additionally caps auto-replies to one
 per contact per configured window.
 
 ## Admin & tenant web portals
@@ -283,24 +286,56 @@ non-Docker setup.) Running it again with an email that already exists exits
 with an error rather than creating a duplicate. Log in at
 `http://localhost:8080/admin/login`.
 
+### Onboarding from the admin portal (recommended)
+
+This is the full path from "nothing" to "WhatsApp linked and auto-replying",
+entirely in the browser. No curl, and no SMTP required.
+
+1. **Log in** as super-admin at `http://localhost:8080/admin/login`.
+2. **Create the tenant** at `http://localhost:8080/admin/tenants`. The create
+   form is inline at the top of the tenant list and takes a **name** and a
+   **rate limit in minutes** (pre-filled with `1440` = 24 hours). There is no
+   separate "new tenant" page.
+3. **Open the tenant** by clicking its name — `/admin/tenants/<id>`. This page
+   shows the tenant's **API key** (the `x-api-key` credential, if you want
+   programmatic access) and lets you edit the rate limit.
+4. **Link WhatsApp**: click **New session**. A QR code appears within a few
+   seconds; scan it from WhatsApp → *Linked devices* → *Link a device*. The
+   page polls every 3 seconds, so the QR refreshes on its own as WhatsApp
+   rotates it, and the status flips to `CONNECTED` with the phone number once
+   linked. If a session later goes `DISCONNECTED` or `LOGGED_OUT`, a
+   **Reconnect** button appears and produces a fresh QR in the same place.
+
+   Each tenant supports exactly one WhatsApp connection, so **New session**
+   disappears once a session exists — use **Reconnect** on the existing one
+   instead. (The API returns 409 if you try anyway.) A second session would
+   share the first's WhatsApp credentials and knock it permanently offline.
+
+That's enough for auto-replies to start working. Steps 5-6 are only needed if
+the tenant is someone *other than you* and should manage their own rules:
+
+5. Set the tenant's **login email** on the same page and click **Save**.
+6. Click **Send password reset** — the tenant gets an emailed link to choose
+   their own password, then logs in at `http://localhost:8080/portal/login`.
+
+Note that step 6 needs SMTP configured (see below); with `SMTP_HOST` unset the
+email is silently skipped. And `send-password-reset` returns 400
+`Tenant has no login email set` if step 5 is skipped — normal validation on a
+required field, not a gap in the flow.
+
 ### Tenant login
 
-Tenants log in separately at `http://localhost:8080/portal/login`, using
+Tenants log in at `http://localhost:8080/portal/login` using
 `Tenant.loginEmail` / a password — not the `x-api-key` header used by the
-curl flow. **Onboarding path:**
+curl flow. From their own portal they can create and reconnect WhatsApp
+sessions (same QR flow as step 4 above), review flagged messages, and manage
+correction rules.
 
-1. A super-admin creates the tenant (`POST /admin/tenants` — takes
-   `name`/`rateLimitHours`; it does not accept a password directly).
-2. The super-admin sets the tenant's login email via
-   `PATCH /admin/tenants/:id` with `{ "loginEmail": "tenant@example.com" }`
-   in the body (also available from the admin portal UI).
-3. The super-admin triggers **"Send password reset"**
-   (`POST /admin/tenants/:id/send-password-reset`) so the tenant receives an
-   emailed link to set their own password.
-
-Note: `send-password-reset` still returns 400 with
-`Tenant has no login email set` if step 2 is skipped — that's just normal
-validation on a required field, not a gap in the flow.
+The equivalent API calls, if you'd rather script it: `POST /admin/tenants`
+(`name`, `rateLimitMinutes`), `PATCH /admin/tenants/:id` (`loginEmail`,
+`rateLimitMinutes`, `status`), `POST /admin/tenants/:id/sessions`,
+`POST /admin/tenants/:id/sessions/:sessionId/reconnect`, and
+`POST /admin/tenants/:id/send-password-reset`.
 
 ### Environment variables for the portals
 

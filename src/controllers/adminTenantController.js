@@ -10,12 +10,20 @@ const TENANT_PUBLIC_SELECT = {
   id: true,
   name: true,
   apiKey: true,
-  rateLimitHours: true,
+  rateLimitMinutes: true,
   loginEmail: true,
   status: true,
   createdAt: true,
   updatedAt: true,
 };
+
+const RATE_LIMIT_ERROR = 'rateLimitMinutes must be a positive integer';
+
+// The column is a Postgres INTEGER; a float or a string would either be silently
+// truncated by Prisma or blow up as a 500 at the driver, so reject both here.
+function isValidRateLimit(value) {
+  return Number.isInteger(value) && value > 0;
+}
 
 async function listTenants(req, res) {
   const { limit } = req.query;
@@ -28,11 +36,14 @@ async function listTenants(req, res) {
 }
 
 async function createTenant(req, res) {
-  const { name, rateLimitHours } = req.body;
+  const { name, rateLimitMinutes } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
+  if (rateLimitMinutes !== undefined && !isValidRateLimit(rateLimitMinutes)) {
+    return res.status(400).json({ error: RATE_LIMIT_ERROR });
+  }
 
   const tenant = await prisma.tenant.create({
-    data: { name, rateLimitHours: rateLimitHours ?? 24 },
+    data: { name, rateLimitMinutes: rateLimitMinutes ?? 1440 },
     select: TENANT_PUBLIC_SELECT,
   });
   await writeAuditLog({
@@ -44,7 +55,7 @@ async function createTenant(req, res) {
     tenantId: tenant.id,
     // Field-picked: the raw row carries apiKey (and could carry passwordHash),
     // and audit logs are readable by every super-admin via GET /admin/audit-logs.
-    afterData: { name: tenant.name, rateLimitHours: tenant.rateLimitHours },
+    afterData: { name: tenant.name, rateLimitMinutes: tenant.rateLimitMinutes },
   });
   res.status(201).json(tenant);
 }
@@ -65,10 +76,13 @@ async function updateTenant(req, res) {
   });
   if (!existing) return res.status(404).json({ error: 'Tenant not found' });
 
-  const { name, rateLimitHours, status, loginEmail } = req.body;
+  const { name, rateLimitMinutes, status, loginEmail } = req.body;
   const validStatuses = ['ACTIVE', 'SUSPENDED'];
   if (status !== undefined && !validStatuses.includes(status)) {
     return res.status(400).json({ error: `status must be one of ${validStatuses.join(', ')}` });
+  }
+  if (rateLimitMinutes !== undefined && !isValidRateLimit(rateLimitMinutes)) {
+    return res.status(400).json({ error: RATE_LIMIT_ERROR });
   }
 
   const data = {};
@@ -79,9 +93,9 @@ async function updateTenant(req, res) {
     data.name = name;
     beforeData.name = existing.name;
   }
-  if (rateLimitHours !== undefined) {
-    data.rateLimitHours = rateLimitHours;
-    beforeData.rateLimitHours = existing.rateLimitHours;
+  if (rateLimitMinutes !== undefined) {
+    data.rateLimitMinutes = rateLimitMinutes;
+    beforeData.rateLimitMinutes = existing.rateLimitMinutes;
   }
   if (status !== undefined) {
     data.status = status;
@@ -99,7 +113,7 @@ async function updateTenant(req, res) {
   });
 
   if (name !== undefined) afterData.name = updated.name;
-  if (rateLimitHours !== undefined) afterData.rateLimitHours = updated.rateLimitHours;
+  if (rateLimitMinutes !== undefined) afterData.rateLimitMinutes = updated.rateLimitMinutes;
   if (status !== undefined) afterData.status = updated.status;
   if (loginEmail !== undefined) afterData.loginEmail = updated.loginEmail;
 

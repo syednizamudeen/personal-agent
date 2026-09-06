@@ -1,6 +1,8 @@
 const prisma = require('../db/prisma');
 const { writeAuditLog } = require('../services/auditService');
-const { reconnectSession } = require('../services/baileysManager');
+const { reconnectSession, startSession } = require('../services/baileysManager');
+const logger = require('../config/logger');
+const { findBlockingSession, DUPLICATE_SESSION_ERROR } = require('./sessionController');
 
 async function listTenantMessages(req, res) {
   const { id: tenantId } = req.params;
@@ -67,6 +69,44 @@ async function listTenantSessions(req, res) {
   res.json(sessions);
 }
 
+// Mirrors sessionController.createSession, but scoped by :id rather than req.tenant, so a
+// super-admin can start the QR flow during onboarding instead of it being portal-only.
+async function createTenantSession(req, res) {
+  const { id: tenantId } = req.params;
+  const { label } = req.body;
+
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
+  if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+  // Same one-socket-per-tenant rule the portal enforces; see sessionController.
+  const blocking = await findBlockingSession(tenantId);
+  if (blocking) {
+    return res.status(409).json({ error: DUPLICATE_SESSION_ERROR, sessionId: blocking.id });
+  }
+
+  const session = await prisma.whatsAppSession.create({
+    data: { tenantId, label: label || 'Main Line', status: 'PENDING_QR' },
+  });
+
+  // Fire-and-forget: the QR arrives asynchronously on the session row, which the
+  // admin UI polls for. Awaiting it would hold the request open until WhatsApp replies.
+  startSession(tenantId, session.id).catch((err) => {
+    logger.error({ err, tenantId, sessionId: session.id }, 'Failed to start admin-created session');
+  });
+
+  await writeAuditLog({
+    actorType: 'SUPER_ADMIN',
+    actorId: req.superAdmin.id,
+    action: 'SESSION_CREATED',
+    targetType: 'WhatsAppSession',
+    targetId: session.id,
+    tenantId,
+    afterData: { status: session.status, label: session.label },
+  });
+
+  res.status(201).json({ sessionId: session.id, status: session.status });
+}
+
 async function reconnectTenantSession(req, res) {
   const { id: tenantId, sessionId } = req.params;
   await reconnectSession(tenantId, sessionId);
@@ -87,5 +127,6 @@ module.exports = {
   createTenantCorrection,
   deleteTenantCorrection,
   listTenantSessions,
+  createTenantSession,
   reconnectTenantSession,
 };

@@ -24,6 +24,7 @@ router.get('/tenants/:id/corrections', asyncHandler(adminTenantDataController.li
 router.post('/tenants/:id/corrections', asyncHandler(adminTenantDataController.createTenantCorrection));
 router.delete('/tenants/:id/corrections/:ruleId', asyncHandler(adminTenantDataController.deleteTenantCorrection));
 router.get('/tenants/:id/sessions', asyncHandler(adminTenantDataController.listTenantSessions));
+router.post('/tenants/:id/sessions', asyncHandler(adminTenantDataController.createTenantSession));
 router.post('/tenants/:id/sessions/:sessionId/reconnect', asyncHandler(adminTenantDataController.reconnectTenantSession));
 
 router.get('/audit-logs', asyncHandler(adminAuditController.listAuditLogs));

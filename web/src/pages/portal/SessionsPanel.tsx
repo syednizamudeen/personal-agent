@@ -10,6 +10,10 @@ interface Session {
   qrCode: string | null;
 }
 
+// One live socket per tenant: Baileys auth state is keyed per tenant, so a second
+// session shares the first's credentials and the two knock each other offline.
+const BLOCKS_NEW_SESSION = ['PENDING_QR', 'CONNECTED', 'DISCONNECTED'];
+
 export function SessionsPanel() {
   const queryClient = useQueryClient();
 
@@ -29,14 +33,23 @@ export function SessionsPanel() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['portal', 'sessions'] }),
   });
 
+  const hasLiveSession = (sessions ?? []).some((s) => BLOCKS_NEW_SESSION.includes(s.status));
+
   return (
     <Card>
       <div className="flex justify-between items-center mb-3">
         <h2 className="font-semibold">WhatsApp Session</h2>
-        <Button onClick={() => createSession.mutate()} disabled={createSession.isPending}>
-          New Session
-        </Button>
+        {!hasLiveSession && (
+          <Button onClick={() => createSession.mutate()} disabled={createSession.isPending}>
+            New Session
+          </Button>
+        )}
       </div>
+      {hasLiveSession && (
+        <p className="text-muted text-sm">
+          You already have a session. Use <strong>Reconnect device</strong> to re-link WhatsApp.
+        </p>
+      )}
       {(sessions ?? []).map((session) => (
         <div key={session.sessionId} className="border-t border-border pt-3 mt-3 first:border-0 first:pt-0 first:mt-0">
           <p className="text-sm">

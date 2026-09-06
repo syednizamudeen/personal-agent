@@ -41,7 +41,7 @@ model Tenant {
   id              String       @id @default(uuid())
   name            String
   apiKey          String       @unique @default(uuid())
-  rateLimitHours  Int          @default(24)
+  rateLimitMinutes Int         @default(1440)
   loginEmail      String?      @unique
   passwordHash    String?
   status          TenantStatus @default(ACTIVE)

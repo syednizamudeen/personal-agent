@@ -2,19 +2,37 @@ const prisma = require('../db/prisma');
 const { startSession } = require('../services/baileysManager');
 
 async function createTenant(req, res) {
-  const { name, rateLimitHours } = req.body;
+  const { name, rateLimitMinutes } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   const tenant = await prisma.tenant.create({
-    data: { name, rateLimitHours: rateLimitHours ?? 24 },
+    data: { name, rateLimitMinutes: rateLimitMinutes ?? 1440 },
   });
 
   res.status(201).json(tenant);
 }
 
+// A tenant supports exactly one live WhatsApp socket: Baileys auth state is keyed
+// per tenant and getSocket() resolves by tenantId. Creating a second session starts
+// a second socket on the same credentials, and the two knock each other offline in
+// an endless reconnect loop. Reuse the existing row via reconnect instead.
+const DUPLICATE_SESSION_ERROR =
+  'This tenant already has a WhatsApp session. Reconnect it instead of creating another.';
+
+async function findBlockingSession(tenantId) {
+  return prisma.whatsAppSession.findFirst({
+    where: { tenantId, status: { in: ['PENDING_QR', 'CONNECTED', 'DISCONNECTED'] } },
+  });
+}
+
 async function createSession(req, res) {
   const tenant = req.tenant;
   const { label } = req.body;
+
+  const blocking = await findBlockingSession(tenant.id);
+  if (blocking) {
+    return res.status(409).json({ error: DUPLICATE_SESSION_ERROR, sessionId: blocking.id });
+  }
 
   const session = await prisma.whatsAppSession.create({
     data: { tenantId: tenant.id, label, status: 'PENDING_QR' },
@@ -70,4 +88,12 @@ async function listMessageLogs(req, res) {
   res.json(logs);
 }
 
-module.exports = { createTenant, createSession, getSessionStatus, listSessions, listMessageLogs };
+module.exports = {
+  createTenant,
+  createSession,
+  getSessionStatus,
+  listSessions,
+  listMessageLogs,
+  findBlockingSession,
+  DUPLICATE_SESSION_ERROR,
+};
