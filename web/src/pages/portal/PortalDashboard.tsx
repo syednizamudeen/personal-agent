@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { SessionsPanel } from './SessionsPanel';
 import { MessagesPanel } from './MessagesPanel';
 import { CorrectionsPanel } from './CorrectionsPanel';
+import { ContactFiltersCard } from '../../components/ContactFiltersCard';
 
 export function PortalDashboard() {
   const { logout } = usePortalAuth();
@@ -18,6 +19,7 @@ export function PortalDashboard() {
       <SessionsPanel />
       <MessagesPanel />
       <CorrectionsPanel />
+      <ContactFiltersCard basePath="/portal/contact-filters" queryKey={['portal', 'contact-filters']} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ const CONFIDENCE_THRESHOLD = 0.6;
  * Turns a Level 2 engine result into a concrete outcome: whether to reply,
  * what to reply with, and what MessageLog status to record.
  */
-function resolveOutcome(level2Result) {
+function resolveOutcome(level2Result, tenant = {}) {
   if (level2Result.source === 'RULE') {
     switch (level2Result.action) {
       case 'SKIP_REPLY':
@@ -25,6 +25,13 @@ function resolveOutcome(level2Result) {
   const c = level2Result.classification || {};
 
   if (c.isForwardedContent) {
+    return { status: 'SKIPPED', reply: null };
+  }
+
+  // Narrowest possible auto-reply mode: only greetings and well-wishes get answered,
+  // everything else is left for a human. Applied after classification because only the
+  // classifier can tell a greeting from a real question.
+  if (tenant.greetingsOnly && !c.isGreetingOrWish) {
     return { status: 'SKIPPED', reply: null };
   }
 

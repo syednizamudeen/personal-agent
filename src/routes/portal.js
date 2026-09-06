@@ -2,6 +2,11 @@ const express = require('express');
 const portalAuthController = require('../controllers/portalAuthController');
 const requireTenantSession = require('../middleware/requireTenantSession');
 const asyncHandler = require('../middleware/asyncHandler');
+const {
+  listContactFilters,
+  createContactFilter,
+  deleteContactFilter,
+} = require('../controllers/contactFilterController');
 const sessionController = require('../controllers/sessionController');
 const reviewController = require('../controllers/reviewController');
 
@@ -25,5 +30,12 @@ router.get('/messages', asyncHandler(sessionController.listMessageLogs));
 router.get('/corrections', asyncHandler(reviewController.listCorrections));
 router.post('/corrections', asyncHandler(reviewController.createCorrection));
 router.delete('/corrections/:ruleId', asyncHandler(reviewController.deleteCorrection));
+
+router.get('/contact-filters', asyncHandler((req, res) => listContactFilters(req.tenant.id, res)));
+router.post('/contact-filters', asyncHandler((req, res) => createContactFilter(req.tenant.id, req.body, res)));
+router.delete(
+  '/contact-filters/:filterId',
+  asyncHandler((req, res) => deleteContactFilter(req.tenant.id, req.params.filterId, res))
+);
 
 module.exports = router;

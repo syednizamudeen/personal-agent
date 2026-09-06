@@ -14,7 +14,7 @@ const { classifyWithOllama } = require('./ollamaClient');
  * @returns {{ source: 'RULE'|'LLM', action?: string, category?: string, forcedReply?: string,
  *             ruleId?: string, classification?: object }}
  */
-async function runLevel2Engine({ tenantId, text, imageBase64 }) {
+async function runLevel2Engine({ tenantId, tenant, senderName, text, imageBase64 }) {
   const ruleMatch = await matchCorrectionRule(tenantId, text);
   if (ruleMatch) {
     logger.info({ tenantId, ruleId: ruleMatch.id }, 'Level2: hard rule matched, bypassing LLM');
@@ -27,7 +27,7 @@ async function runLevel2Engine({ tenantId, text, imageBase64 }) {
     };
   }
 
-  const classification = await classifyWithOllama({ text, imageBase64 });
+  const classification = await classifyWithOllama({ text, imageBase64, tenant, senderName });
   return { source: 'LLM', classification };
 }
 

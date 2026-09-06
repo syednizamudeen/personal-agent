@@ -11,6 +11,15 @@ const TENANT_PUBLIC_SELECT = {
   name: true,
   apiKey: true,
   rateLimitMinutes: true,
+  assistantName: true,
+  ownerName: true,
+  businessInfo: true,
+  personaInstructions: true,
+  replyToDirect: true,
+  groupReplyMode: true,
+  greetingsOnly: true,
+  contactPolicy: true,
+  autoReplyBurstLimit: true,
   loginEmail: true,
   status: true,
   createdAt: true,
@@ -18,6 +27,24 @@ const TENANT_PUBLIC_SELECT = {
 };
 
 const RATE_LIMIT_ERROR = 'rateLimitMinutes must be a positive integer';
+const CONTACT_POLICIES = ['ALL', 'ALLOWLIST'];
+const BOOLEAN_FIELDS = ['replyToDirect', 'greetingsOnly'];
+const GROUP_REPLY_MODES = ['NEVER', 'MENTIONED_ONLY', 'ALWAYS'];
+// Everything a super-admin may PATCH. apiKey/passwordHash are deliberately absent.
+const EDITABLE_FIELDS = [
+  'name',
+  'rateLimitMinutes',
+  'status',
+  'loginEmail',
+  'assistantName',
+  'ownerName',
+  'businessInfo',
+  'personaInstructions',
+  'contactPolicy',
+  'groupReplyMode',
+  'autoReplyBurstLimit',
+  ...BOOLEAN_FIELDS,
+];
 
 // The column is a Postgres INTEGER; a float or a string would either be silently
 // truncated by Prisma or blow up as a 500 at the driver, so reject both here.
@@ -76,7 +103,8 @@ async function updateTenant(req, res) {
   });
   if (!existing) return res.status(404).json({ error: 'Tenant not found' });
 
-  const { name, rateLimitMinutes, status, loginEmail } = req.body;
+  const { status, rateLimitMinutes, contactPolicy, autoReplyBurstLimit, groupReplyMode } = req.body;
+
   const validStatuses = ['ACTIVE', 'SUSPENDED'];
   if (status !== undefined && !validStatuses.includes(status)) {
     return res.status(400).json({ error: `status must be one of ${validStatuses.join(', ')}` });
@@ -84,26 +112,30 @@ async function updateTenant(req, res) {
   if (rateLimitMinutes !== undefined && !isValidRateLimit(rateLimitMinutes)) {
     return res.status(400).json({ error: RATE_LIMIT_ERROR });
   }
+  if (autoReplyBurstLimit !== undefined && !isValidRateLimit(autoReplyBurstLimit)) {
+    return res.status(400).json({ error: 'autoReplyBurstLimit must be a positive integer' });
+  }
+  if (contactPolicy !== undefined && !CONTACT_POLICIES.includes(contactPolicy)) {
+    return res.status(400).json({ error: `contactPolicy must be one of ${CONTACT_POLICIES.join(', ')}` });
+  }
+  if (groupReplyMode !== undefined && !GROUP_REPLY_MODES.includes(groupReplyMode)) {
+    return res.status(400).json({ error: `groupReplyMode must be one of ${GROUP_REPLY_MODES.join(', ')}` });
+  }
 
   const data = {};
   const beforeData = {};
   const afterData = {};
 
-  if (name !== undefined) {
-    data.name = name;
-    beforeData.name = existing.name;
-  }
-  if (rateLimitMinutes !== undefined) {
-    data.rateLimitMinutes = rateLimitMinutes;
-    beforeData.rateLimitMinutes = existing.rateLimitMinutes;
-  }
-  if (status !== undefined) {
-    data.status = status;
-    beforeData.status = existing.status;
-  }
-  if (loginEmail !== undefined) {
-    data.loginEmail = loginEmail;
-    beforeData.loginEmail = existing.loginEmail;
+  // Copy only the fields the caller actually sent, so a PATCH never blanks a field it
+  // did not mention, and audit before/after stay narrow (see writeAuditLog convention).
+  for (const field of EDITABLE_FIELDS) {
+    const value = req.body[field];
+    if (value === undefined) continue;
+    if (BOOLEAN_FIELDS.includes(field) && typeof value !== 'boolean') {
+      return res.status(400).json({ error: `${field} must be a boolean` });
+    }
+    data[field] = value;
+    beforeData[field] = existing[field];
   }
 
   const updated = await prisma.tenant.update({
@@ -112,10 +144,9 @@ async function updateTenant(req, res) {
     select: TENANT_PUBLIC_SELECT,
   });
 
-  if (name !== undefined) afterData.name = updated.name;
-  if (rateLimitMinutes !== undefined) afterData.rateLimitMinutes = updated.rateLimitMinutes;
-  if (status !== undefined) afterData.status = updated.status;
-  if (loginEmail !== undefined) afterData.loginEmail = updated.loginEmail;
+  for (const field of Object.keys(data)) {
+    afterData[field] = updated[field];
+  }
 
   await writeAuditLog({
     actorType: 'SUPER_ADMIN',

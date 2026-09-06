@@ -5,8 +5,12 @@ import { apiFetch } from '../../lib/apiClient';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { AssistantSettingsCard } from '../../components/AssistantSettingsCard';
+import type { AssistantSettings } from '../../components/AssistantSettingsCard';
+import { ContactFiltersCard } from '../../components/ContactFiltersCard';
+import { CorrectionRulesCard } from '../../components/CorrectionRulesCard';
 
-interface Tenant {
+interface Tenant extends AssistantSettings {
   id: string;
   name: string;
   status: 'ACTIVE' | 'SUSPENDED';
@@ -174,6 +178,22 @@ export function TenantDetail() {
           </p>
         </div>
       </Card>
+
+      <AssistantSettingsCard
+        tenant={tenant}
+        basePath={`/admin/tenants/${id}`}
+        queryKey={['admin', 'tenants', id]}
+      />
+
+      <CorrectionRulesCard
+        basePath={`/admin/tenants/${id}/corrections`}
+        queryKey={['admin', 'tenants', id, 'corrections']}
+      />
+
+      <ContactFiltersCard
+        basePath={`/admin/tenants/${id}/contact-filters`}
+        queryKey={['admin', 'tenants', id, 'contact-filters']}
+      />
 
       <Card>
         <div className="flex justify-between items-center mb-3">

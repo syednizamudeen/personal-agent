@@ -7,6 +7,7 @@ const logger = require('../config/logger');
 const { createRedisConnection } = require('../config/redis');
 const { useRedisAuthState, clearAuthState } = require('./redisAuthState');
 const { sendDisconnectAlertEmail } = require('./emailService');
+const { mentionsMe } = require('./mentionDetector');
 
 // Required lazily inside handleIncomingMessage to avoid a circular require
 // (messageQueue -> replyQueue -> baileysManager -> messageQueue).
@@ -152,6 +153,12 @@ async function handleIncomingMessage(sock, tenantId, sessionId, msg) {
     tenantId,
     sessionId,
     remoteJid,
+    // The sender's WhatsApp display name. Used to personalize replies; absent on
+    // broadcasts and some group events, so every consumer must tolerate null.
+    senderName: msg.pushName || null,
+    // Must be resolved here: it needs the live socket's own identity, which the
+    // queue worker has no access to.
+    mentionsMe: mentionsMe(messageContent, sock.user),
     messageType: isImage ? 'image' : 'text',
     text,
     mediaBase64,

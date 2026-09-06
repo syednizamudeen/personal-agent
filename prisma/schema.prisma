@@ -37,6 +37,26 @@ enum ActorType {
   TENANT
 }
 
+// ALL replies to anyone not explicitly blocked; ALLOWLIST replies only to contacts
+// listed with ALLOW. Blocked contacts are ignored under both policies.
+enum ContactPolicy {
+  ALL
+  ALLOWLIST
+}
+
+enum ContactFilterType {
+  ALLOW
+  BLOCK
+}
+
+// How the assistant behaves in group chats. MENTIONED_ONLY is the useful middle
+// ground: stay silent in the group unless someone @-mentions this number.
+enum GroupReplyMode {
+  NEVER
+  MENTIONED_ONLY
+  ALWAYS
+}
+
 model Tenant {
   id              String       @id @default(uuid())
   name            String
@@ -45,12 +65,30 @@ model Tenant {
   loginEmail      String?      @unique
   passwordHash    String?
   status          TenantStatus @default(ACTIVE)
+
+  // Persona: who the assistant presents itself as. Without these the model answers
+  // "what is your name" with its own model name (observed: "I'm Gemma").
+  assistantName       String?
+  ownerName           String?
+  businessInfo        String?
+  personaInstructions String?
+
+  // Reply targeting
+  replyToDirect        Boolean        @default(true)
+  groupReplyMode       GroupReplyMode @default(NEVER)
+  greetingsOnly        Boolean       @default(false)
+  contactPolicy        ContactPolicy @default(ALL)
+  // Safety net against auto-responder ping-pong: max auto-replies to one contact per
+  // rolling hour, independent of rateLimitMinutes.
+  autoReplyBurstLimit  Int           @default(5)
+
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
   sessions        WhatsAppSession[]
   messageLogs     MessageLog[]
   correctionRules CorrectionRule[]
+  contactFilters  ContactFilter[]
 
   @@map("tenants")
 }
@@ -71,12 +109,33 @@ model WhatsAppSession {
   @@map("whatsapp_sessions")
 }
 
+model ContactFilter {
+  id        String            @id @default(uuid())
+  tenantId  String
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Bare WhatsApp JID as it arrives on the message (e.g. "6591234567@s.whatsapp.net").
+  jid       String
+  type      ContactFilterType
+  label     String?
+  createdAt DateTime          @default(now())
+
+  @@unique([tenantId, jid])
+  @@index([tenantId, type])
+  @@map("contact_filters")
+}
+
 model MessageLog {
   id                String        @id @default(uuid())
   tenantId          String
   tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   sessionId         String
   remoteJid         String
+  // WhatsApp display name of the sender (Baileys msg.pushName), used to personalize
+  // replies. Absent for broadcasts and some group events.
+  senderName        String?
+  // Whether this message @-mentioned the tenant's own number. Resolved at capture
+  // time from the live socket's identity; it cannot be recovered afterwards.
+  mentionsMe        Boolean       @default(false)
   direction         String        @default("INBOUND")
   messageType       String
   rawText           String?

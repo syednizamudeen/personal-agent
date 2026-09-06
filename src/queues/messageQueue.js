@@ -4,6 +4,7 @@ const prisma = require('../db/prisma');
 const logger = require('../config/logger');
 const { runLevel2Engine } = require('../services/level2Engine');
 const { resolveOutcome } = require('../services/replyGenerator');
+const { shouldSkip } = require('../services/messageFilter');
 const { enqueueOutgoingReply } = require('./replyQueue');
 
 const QUEUE_NAME = 'incoming-messages-queue';
@@ -23,7 +24,8 @@ function startMessageWorker() {
   return new Worker(
     QUEUE_NAME,
     async (job) => {
-      const { tenantId, sessionId, remoteJid, messageType, text, mediaBase64, messageKey } = job.data;
+      const { tenantId, sessionId, remoteJid, senderName, mentionsMe, messageType, text, mediaBase64, messageKey } =
+        job.data;
 
       const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
       if (!tenant) {
@@ -31,12 +33,16 @@ function startMessageWorker() {
         return;
       }
 
-      if (await isRateLimited(tenantId, remoteJid, tenant.rateLimitMinutes)) {
+      const skipReason = await shouldSkip(tenant, remoteJid, { mentionsMe });
+      if (skipReason) {
+        logger.info({ tenantId, remoteJid, skipReason }, 'Message skipped before classification');
         await prisma.messageLog.create({
           data: {
             tenantId,
             sessionId,
             remoteJid,
+            senderName,
+            mentionsMe: Boolean(mentionsMe),
             messageType,
             rawText: text,
             mediaBase64: messageType === 'image' ? mediaBase64 : null,
@@ -46,8 +52,14 @@ function startMessageWorker() {
         return;
       }
 
-      const level2Result = await runLevel2Engine({ tenantId, text, imageBase64: mediaBase64 });
-      const outcome = resolveOutcome(level2Result);
+      const level2Result = await runLevel2Engine({
+        tenantId,
+        tenant,
+        senderName,
+        text,
+        imageBase64: mediaBase64,
+      });
+      const outcome = resolveOutcome(level2Result, tenant);
       const classification = level2Result.classification || {};
 
       const log = await prisma.messageLog.create({
@@ -55,6 +67,8 @@ function startMessageWorker() {
           tenantId,
           sessionId,
           remoteJid,
+          senderName,
+          mentionsMe: Boolean(mentionsMe),
           messageType,
           rawText: text,
           mediaBase64: messageType === 'image' ? mediaBase64 : null,
@@ -81,19 +95,6 @@ function startMessageWorker() {
     },
     { connection: createRedisConnection(), concurrency: 5 }
   );
-}
-
-async function isRateLimited(tenantId, remoteJid, rateLimitMinutes) {
-  const since = new Date(Date.now() - rateLimitMinutes * 60 * 1000);
-  const recentReply = await prisma.messageLog.findFirst({
-    where: {
-      tenantId,
-      remoteJid,
-      status: 'AUTO_REPLIED',
-      createdAt: { gte: since },
-    },
-  });
-  return Boolean(recentReply);
 }
 
 module.exports = { messageQueue, enqueueIncomingMessage, startMessageWorker };

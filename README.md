@@ -323,6 +323,58 @@ email is silently skipped. And `send-password-reset` returns 400
 `Tenant has no login email set` if step 5 is skipped — normal validation on a
 required field, not a gap in the flow.
 
+### Tuning the assistant: persona and what gets a reply
+
+Both live on the tenant's admin page (`/admin/tenants/<id>`), and the same
+controls appear on the tenant portal.
+
+**Assistant persona.** With these blank, the AI has no identity and answers
+questions about itself with the underlying model's name (asked "what is your
+name", it will happily reply "I'm Gemma, a large language model"). Set:
+
+- **Assistant name** — what it calls itself, e.g. `Aria`
+- **Replying on behalf of** — you or your business, e.g. `Nizam`
+- **About you / your business** — one line of context
+- **Extra instructions** — anything else, e.g. "always confirm the event date
+  before quoting"
+
+The prompt also instructs it never to disclose that it is an AI, and passes
+the sender's WhatsApp display name so replies can address people by name.
+
+**What gets a reply**, in the order the checks run:
+
+| Gate | Control | Default |
+|---|---|---|
+| Status posts, newsletters | always ignored | — |
+| Direct (1-to-1) messages | **Direct messages** toggle | on |
+| Group chats | **Group chats**: never / only when @-mentioned / always | never |
+| Blocked contacts | **Contacts** card, `BLOCK` | none |
+| Allowlist mode | **Reply policy** = only allow-listed | off |
+| One reply per contact per window | **Rate limit (minutes)** | 1440 (24h) |
+| Runaway loop guard | **Max auto-replies per contact per hour** | 5 |
+| Greetings only | **Only auto-reply to greetings** toggle | off |
+| Message content | **Correction rules** → `SKIP_REPLY` | none |
+
+Every skipped message still gets a `SKIPPED` `MessageLog` row, so you can see
+what was ignored and why in the message list.
+
+**Group chats** have three modes. `NEVER` (default) logs group messages without
+answering. `MENTIONED_ONLY` stays quiet unless someone @-mentions your number —
+or replies directly to one of your messages, which WhatsApp also treats as
+addressing you. `ALWAYS` answers everything posted in every group, which is
+usually too noisy to want.
+
+**On the loop guard:** if you point two instances of this app at each other —
+or reply to anyone else running an auto-responder — the rate limit alone will
+*not* stop them. Each side simply waits out the window and replies again,
+forever. The per-hour burst cap is what actually breaks that cycle. Keep it
+set, and be careful about lowering the rate limit to a few minutes for
+testing.
+
+**Correction rules** are the content-level control: a regex match on the
+incoming text, checked *before* the AI runs. `SKIP_REPLY` ignores the message,
+`FORCE_GREETING` sends a fixed reply, `FORCE_CATEGORY` flags it for review.
+
 ### Tenant login
 
 Tenants log in at `http://localhost:8080/portal/login` using

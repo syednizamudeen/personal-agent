@@ -2,6 +2,11 @@ const express = require('express');
 const adminAuthController = require('../controllers/adminAuthController');
 const requireSuperAdmin = require('../middleware/requireSuperAdmin');
 const asyncHandler = require('../middleware/asyncHandler');
+const {
+  listContactFilters,
+  createContactFilter,
+  deleteContactFilter,
+} = require('../controllers/contactFilterController');
 const adminTenantController = require('../controllers/adminTenantController');
 const adminTenantDataController = require('../controllers/adminTenantDataController');
 const adminAuditController = require('../controllers/adminAuditController');
@@ -23,6 +28,13 @@ router.get('/tenants/:id/messages', asyncHandler(adminTenantDataController.listT
 router.get('/tenants/:id/corrections', asyncHandler(adminTenantDataController.listTenantCorrections));
 router.post('/tenants/:id/corrections', asyncHandler(adminTenantDataController.createTenantCorrection));
 router.delete('/tenants/:id/corrections/:ruleId', asyncHandler(adminTenantDataController.deleteTenantCorrection));
+router.get('/tenants/:id/contact-filters', asyncHandler((req, res) => listContactFilters(req.params.id, res)));
+router.post('/tenants/:id/contact-filters', asyncHandler((req, res) => createContactFilter(req.params.id, req.body, res)));
+router.delete(
+  '/tenants/:id/contact-filters/:filterId',
+  asyncHandler((req, res) => deleteContactFilter(req.params.id, req.params.filterId, res))
+);
+
 router.get('/tenants/:id/sessions', asyncHandler(adminTenantDataController.listTenantSessions));
 router.post('/tenants/:id/sessions', asyncHandler(adminTenantDataController.createTenantSession));
 router.post('/tenants/:id/sessions/:sessionId/reconnect', asyncHandler(adminTenantDataController.reconnectTenantSession));
