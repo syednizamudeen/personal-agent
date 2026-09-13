@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../db/prisma');
 const sessionController = require('../controllers/sessionController');
 const reviewController = require('../controllers/reviewController');
+const devController = require('../controllers/devController');
 const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
@@ -30,5 +31,9 @@ router.get('/messages', asyncHandler(sessionController.listMessageLogs));
 router.post('/corrections', asyncHandler(reviewController.createCorrection));
 router.get('/corrections', asyncHandler(reviewController.listCorrections));
 router.delete('/corrections/:ruleId', asyncHandler(reviewController.deleteCorrection));
+
+// Dev-only helper: runs a message through the real filter/classify/reply pipeline
+// and returns the result without a live WhatsApp session. See CLAUDE.md.
+router.post('/dev/test-message', asyncHandler(devController.testMessage));
 
 module.exports = router;

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from '../../lib/apiClient';
-import { Card } from '../../components/ui/Card';
-import { Table, Th, Td } from '../../components/ui/Table';
+import { apiFetch } from '../lib/apiClient';
+import { Card } from './ui/Card';
+import { Table, Th, Td } from './ui/Table';
 
 interface MessageLog {
   id: string;
@@ -12,10 +12,17 @@ interface MessageLog {
   createdAt: string;
 }
 
-export function MessagesPanel() {
+interface Props {
+  // '/portal/messages' or '/admin/tenants/<id>/messages' — both routers mount a
+  // handler over the same MessageLog rows, so one component serves both portals.
+  basePath: string;
+  queryKey: unknown[];
+}
+
+export function MessagesCard({ basePath, queryKey }: Props) {
   const { data: messages } = useQuery<MessageLog[]>({
-    queryKey: ['portal', 'messages'],
-    queryFn: () => apiFetch('/portal/messages'),
+    queryKey,
+    queryFn: () => apiFetch(basePath),
   });
 
   return (

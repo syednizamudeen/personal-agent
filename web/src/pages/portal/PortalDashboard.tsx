@@ -1,7 +1,7 @@
 import { usePortalAuth } from '../../lib/authContext';
 import { Button } from '../../components/ui/Button';
 import { SessionsPanel } from './SessionsPanel';
-import { MessagesPanel } from './MessagesPanel';
+import { MessagesCard } from '../../components/MessagesCard';
 import { CorrectionsPanel } from './CorrectionsPanel';
 import { ContactFiltersCard } from '../../components/ContactFiltersCard';
 
@@ -17,7 +17,7 @@ export function PortalDashboard() {
         </Button>
       </div>
       <SessionsPanel />
-      <MessagesPanel />
+      <MessagesCard basePath="/portal/messages" queryKey={['portal', 'messages']} />
       <CorrectionsPanel />
       <ContactFiltersCard basePath="/portal/contact-filters" queryKey={['portal', 'contact-filters']} />
     </div>

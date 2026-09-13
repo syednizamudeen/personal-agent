@@ -37,10 +37,20 @@ async function startSession(tenantId, sessionId) {
 
   const { state, saveCreds } = await useRedisAuthState(redis, tenantId);
 
+  // Without this, Baileys' default browser tuple (['Ubuntu', 'Chrome', ...]) shows up
+  // in WhatsApp's Linked Devices list and sync notifications as "Google Chrome
+  // (Ubuntu)" — indistinguishable from a real browser and, with multiple tenants,
+  // indistinguishable from each other. WhatsApp renders the tuple as
+  // "<browserName> (<platform>)"; leaving platform blank collapses that to just the
+  // tenant's own name.
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
+  const browser = ['', tenant?.name || 'Personal Agent', ''];
+
   const sock = makeWASocket({
     auth: state,
     logger: logger.child({ tenantId }),
     printQRInTerminal: false,
+    browser,
   });
 
   activeSockets.set(tenantId, sock);

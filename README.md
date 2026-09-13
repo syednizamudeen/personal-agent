@@ -223,6 +223,41 @@ curl "http://localhost:3000/api/v1/messages?status=FLAGGED_FOR_REVIEW" \
   -H "x-api-key: <TENANT_API_KEY>"
 ```
 
+The same log is also viewable as a "Recent Messages" table in both the tenant
+portal (`/portal`) and the admin portal (`/admin/tenants/<id>`) — no curl
+needed if you just want to eyeball recent activity for a tenant.
+
+## Testing replies without a phone (dev endpoint)
+
+Holding a second phone to send yourself test messages gets old fast. `POST
+/api/v1/dev/test-message` runs the real filter → Level 2 engine → reply
+pipeline for a tenant and returns the result directly — no WhatsApp session,
+no queue job, and nothing written to `MessageLog` (so it doesn't touch your
+rate-limit or burst-limit history):
+
+```bash
+curl -X POST http://localhost:3000/api/v1/dev/test-message \
+  -H "x-api-key: <TENANT_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Good morning!"}'
+```
+
+```json
+{
+  "status": "AUTO_REPLIED",
+  "reply": "Morning! Let's finalise the demo date and location. Any slots work for you?",
+  "category": null,
+  "source": "LLM",
+  "classification": { "isGreetingOrWish": true, "confidenceScore": 0.95, "...": "..." }
+}
+```
+
+Optional body fields: `remoteJid` (defaults to a fake JID — pass one ending in
+`@g.us` to test group settings), `senderName`, and `mentionsMe: true` (to test
+`MENTIONED_ONLY` group mode). It uses the tenant's real persona, correction
+rules, and toggles (including `greetingsOnly`), so what you see here is what a
+real contact would get.
+
 ## Creating a Level 2 correction rule
 
 When an admin sees a wrong/missing auto-reply in `FLAGGED_FOR_REVIEW` logs:
@@ -352,7 +387,7 @@ the sender's WhatsApp display name so replies can address people by name.
 | Allowlist mode | **Reply policy** = only allow-listed | off |
 | One reply per contact per window | **Rate limit (minutes)** | 1440 (24h) |
 | Runaway loop guard | **Max auto-replies per contact per hour** | 5 |
-| Greetings only | **Only auto-reply to greetings** toggle | off |
+| Greetings only | **Only auto-reply to greetings** toggle | **on** |
 | Message content | **Correction rules** → `SKIP_REPLY` | none |
 
 Every skipped message still gets a `SKIPPED` `MessageLog` row, so you can see
@@ -415,3 +450,32 @@ SMTP_USER=""
 SMTP_PASS=""
 EMAIL_FROM="no-reply@yourdomain.com"
 ```
+
+## Postman collection
+
+`postman/personal-agent.postman_collection.json` covers every route in this
+repo — tenant onboarding, the `x-api-key` API, the tenant portal, the
+super-admin portal, and the dev test-message endpoint — plus a "Planned
+(Phase 2 backlog)" folder of placeholder requests for what's not built yet
+(see "Phase 2 backlog" in `CLAUDE.md`).
+
+**To import:**
+
+1. In Postman: **File → Import**, select both
+   `postman/personal-agent.postman_collection.json` and
+   `postman/personal-agent.postman_environment.json`.
+2. Select the **"personal-agent (local)"** environment (top-right environment
+   picker) and set its `apiKey` variable to a tenant's `apiKey` (from
+   **Create Tenant** or the admin tenant detail page) and `tenantId` to that
+   tenant's id.
+3. The `baseUrl` variable defaults to `http://localhost:8080/api/v1` (the
+   nginx-fronted portal). Change it to `http://localhost:3000/api/v1` to hit
+   the `app` container directly.
+4. Folders **"Tenant Portal"** and **"Super Admin"** use cookie-session auth,
+   not `x-api-key` — run that folder's **Login** request first in the same
+   Postman session; Postman's cookie jar carries the session to every other
+   request in the folder automatically.
+
+**Keep it up to date:** whenever you add, rename, or remove a route in
+`src/routes/api.js`, `portal.js`, or `admin.js`, update this collection in the
+same change — see the standing documentation requirement in `CLAUDE.md`.

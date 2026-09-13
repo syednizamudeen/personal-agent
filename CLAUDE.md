@@ -105,6 +105,64 @@ The original `x-api-key`-based API (`src/routes/api.js`, `requireTenant` middlew
 
 **Standing documentation requirement:** the user has explicitly asked that `README.md` and this `CLAUDE.md` be kept up to date whenever new features are built, now and in the future — not just at the end of a big task. Update both as part of implementing any feature, not as an afterthought.
 
+## Baileys `browser` label is per-tenant, not the library default
+
+`makeWASocket()` in `startSession()` (`src/services/baileysManager.js`) passes
+`browser: ['', tenant.name, '']` — a raw 3-tuple, not Baileys' `Browsers.*` helpers.
+Without it, Baileys falls back to its own default tuple (`['Ubuntu', 'Chrome',
+...]`), which WhatsApp's Linked Devices list and "Finished syncing" notifications
+render as **"<browserName> (<platform>)"**, i.e. verbatim "Google Chrome (Ubuntu)"
+— indistinguishable from a real browser, and with multiple tenants,
+indistinguishable from each other. All three tuple positions are arbitrary
+strings WhatsApp doesn't validate, not OS/browser detection — leaving `platform`
+and `version` empty collapses the notification to just the tenant's name, no
+parenthetical. `startSession()` does one extra `prisma.tenant.findUnique` (name
+only) before creating the socket to build this label. Changing it does not force
+a re-scan of the QR — Baileys reconnected both existing sessions cleanly on
+restart, still `CONNECTED`, no new pairing needed.
+
+## `greetingsOnly` defaults to `true`
+
+Migration `20260913080000_greetings_only_default_true` flipped both the column
+default and every existing tenant's value to `true`. This follows the
+2026-09-13 incident where a tenant's `groupReplyMode` was left permissive and
+the assistant auto-replied broadly in a group chat (confirmed live in
+`message_logs`: real `AUTO_REPLIED` rows against `@g.us` JIDs). With
+`greetingsOnly` on by default, a new or misconfigured tenant only auto-replies
+to greetings/wishes (`isGreetingOrWish`, classified per-message — see
+`replyGenerator.resolveOutcome`) and everything else lands in `SKIPPED` for a
+human to handle, regardless of `groupReplyMode`/`replyToDirect`/rate-limit
+settings. An operator has to explicitly turn this off (portal or admin
+`AssistantSettingsCard`) to get broader auto-replies — the narrowest-safe
+default is now the out-of-the-box behavior, not an opt-in.
+
+## Dev test-message endpoint
+
+`POST /api/v1/dev/test-message` (`src/controllers/devController.js`, mounted in
+`src/routes/api.js` behind the same `x-api-key` `requireTenant` gate as every
+other API-key route) exists so a tenant can see what the assistant would reply
+without a second phone. It runs the exact same three functions the real
+pipeline uses — `messageFilter.shouldSkip` → `level2Engine.runLevel2Engine` →
+`replyGenerator.resolveOutcome` — against the tenant's real settings (persona,
+correction rules, `greetingsOnly`, `groupReplyMode`, etc.) and returns the
+result as JSON. It deliberately does **not** write a `MessageLog` row, enqueue
+anything, or touch a Baileys socket: `MessageLog.sessionId` is non-nullable, so
+persisting a row would need a fake session, and a test call should not count
+against `rateLimitMinutes`/`autoReplyBurstLimit` history for that contact. Pass
+`remoteJid` ending in `@g.us` to test group behavior, or `mentionsMe: true` to
+test `MENTIONED_ONLY`.
+
+## Postman collection
+
+`postman/personal-agent.postman_collection.json` (+ a matching
+`.postman_environment.json`) covers every route currently in
+`src/routes/api.js`/`portal.js`/`admin.js`, plus a "Planned (Phase 2 backlog)"
+folder mirroring the list directly below — one placeholder request per
+backlog item, so a developer opening Postman sees both what exists and what's
+coming. **Update this collection in the same change whenever a route is
+added, renamed, or removed** — same standing rule as README/CLAUDE.md below.
+Import instructions are in `README.md`'s "Postman collection" section.
+
 ## Phase 2 backlog (admin/tenant portal)
 
 Deliberately parked after the final whole-branch review of the portal work — real gaps, not yet built:

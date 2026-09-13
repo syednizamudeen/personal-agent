@@ -76,7 +76,7 @@ model Tenant {
   // Reply targeting
   replyToDirect        Boolean        @default(true)
   groupReplyMode       GroupReplyMode @default(NEVER)
-  greetingsOnly        Boolean       @default(false)
+  greetingsOnly        Boolean       @default(true)
   contactPolicy        ContactPolicy @default(ALL)
   // Safety net against auto-responder ping-pong: max auto-replies to one contact per
   // rolling hour, independent of rateLimitMinutes.

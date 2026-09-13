@@ -1,0 +1,381 @@
+{
+  "info": {
+    "name": "personal-agent",
+    "description": "WhatsApp auto-reply assistant API. Three auth styles in this collection: (1) x-api-key for the original tenant API (folder 'API Key (Tenant)'), (2) cookie session for the tenant portal (folder 'Tenant Portal'), (3) cookie session for the super-admin portal (folder 'Super Admin'). Postman's cookie jar handles (2)/(3) automatically once you run their Login request in this same session. Keep this collection in sync with src/routes/*.js whenever a route is added, renamed, or removed — see CLAUDE.md 'API surface' section.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api/v1" }
+  ],
+  "item": [
+    {
+      "name": "Tenant Onboarding (no auth)",
+      "item": [
+        {
+          "name": "Create Tenant",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/tenants",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Acme Catering\",\n  \"rateLimitMinutes\": 1440\n}"
+            },
+            "description": "The only unauthenticated route. Returns the new tenant's apiKey — save it into the {{apiKey}} environment variable, and set loginEmail/password afterwards via the admin portal (PATCH /admin/tenants/:id + Send password reset) to enable portal login."
+          }
+        }
+      ]
+    },
+    {
+      "name": "API Key (Tenant)",
+      "description": "Original programmatic API. Every request needs header x-api-key: {{apiKey}}.",
+      "item": [
+        {
+          "name": "Create Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": "{{baseUrl}}/sessions",
+            "body": { "mode": "raw", "raw": "{\n  \"label\": \"Main Line\"\n}" },
+            "description": "409s if the tenant already has a PENDING_QR/CONNECTED/DISCONNECTED session (one live socket per tenant, see CLAUDE.md)."
+          }
+        },
+        {
+          "name": "Get Session Status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": "{{baseUrl}}/sessions/{{sessionId}}"
+          }
+        },
+        {
+          "name": "List Message Logs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/messages?status=AUTO_REPLIED&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["messages"],
+              "query": [
+                { "key": "status", "value": "AUTO_REPLIED", "description": "AUTO_REPLIED | FLAGGED_FOR_REVIEW | SKIPPED", "disabled": true },
+                { "key": "limit", "value": "50", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Correction Rules",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": "{{baseUrl}}/corrections"
+          }
+        },
+        {
+          "name": "Create Correction Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": "{{baseUrl}}/corrections",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pattern\": \"unsubscribe\",\n  \"isRegex\": false,\n  \"action\": \"SKIP_REPLY\",\n  \"forcedReply\": null,\n  \"category\": null\n}"
+            },
+            "description": "action: SKIP_REPLY | FORCE_GREETING | FORCE_CATEGORY. Can also include messageLogId to promote a specific flagged message into a rule (see reviewController)."
+          }
+        },
+        {
+          "name": "Delete Correction Rule",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": "{{baseUrl}}/corrections/{{ruleId}}"
+          }
+        },
+        {
+          "name": "Dev: Test Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": "{{baseUrl}}/dev/test-message",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Good morning!\",\n  \"remoteJid\": \"dev-test@s.whatsapp.net\",\n  \"senderName\": \"Test User\",\n  \"mentionsMe\": false\n}"
+            },
+            "description": "Dev-only helper — runs the real filter -> Level2 engine -> reply pipeline for this tenant and returns the result. No MessageLog row is written, no queue job is enqueued, nothing is sent to WhatsApp, and it does not count against rate-limit/burst-limit history. Use remoteJid ending in '@g.us' to test group settings, and mentionsMe:true to test MENTIONED_ONLY. See CLAUDE.md 'Dev test-message endpoint'."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenant Portal (cookie session)",
+      "description": "Session-cookie auth. Run 'Login' first in this Postman session — the cookie jar carries it to every other request in this folder automatically.",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/portal/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"tenant@example.com\",\n  \"password\": \"changeme\"\n}" }
+          }
+        },
+        { "name": "Logout", "request": { "method": "POST", "url": "{{baseUrl}}/portal/logout" } },
+        { "name": "Me", "request": { "method": "GET", "url": "{{baseUrl}}/portal/me" } },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/portal/forgot-password",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"tenant@example.com\"\n}" }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/portal/reset-password",
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"<from email link>\",\n  \"password\": \"newSecurePassword123\"\n}" }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/portal/change-password",
+            "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"changeme\",\n  \"newPassword\": \"newSecurePassword123\"\n}" }
+          }
+        },
+        {
+          "name": "Create Session",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/portal/sessions",
+            "body": { "mode": "raw", "raw": "{\n  \"label\": \"Main Line\"\n}" }
+          }
+        },
+        { "name": "List Sessions", "request": { "method": "GET", "url": "{{baseUrl}}/portal/sessions" } },
+        { "name": "Get Session Status", "request": { "method": "GET", "url": "{{baseUrl}}/portal/sessions/{{sessionId}}" } },
+        { "name": "Reconnect Session", "request": { "method": "POST", "url": "{{baseUrl}}/portal/sessions/{{sessionId}}/reconnect" } },
+        {
+          "name": "List Message Logs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/portal/messages?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["portal", "messages"],
+              "query": [{ "key": "limit", "value": "50" }]
+            }
+          }
+        },
+        { "name": "List Correction Rules", "request": { "method": "GET", "url": "{{baseUrl}}/portal/corrections" } },
+        {
+          "name": "Create Correction Rule",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/portal/corrections",
+            "body": { "mode": "raw", "raw": "{\n  \"pattern\": \"unsubscribe\",\n  \"isRegex\": false,\n  \"action\": \"SKIP_REPLY\"\n}" }
+          }
+        },
+        { "name": "Delete Correction Rule", "request": { "method": "DELETE", "url": "{{baseUrl}}/portal/corrections/{{ruleId}}" } },
+        { "name": "List Contact Filters", "request": { "method": "GET", "url": "{{baseUrl}}/portal/contact-filters" } },
+        {
+          "name": "Create Contact Filter",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/portal/contact-filters",
+            "body": { "mode": "raw", "raw": "{\n  \"jid\": \"6591234567\",\n  \"type\": \"BLOCK\",\n  \"label\": \"Spam number\"\n}" },
+            "description": "jid accepts a bare phone number (auto-normalized to <digits>@s.whatsapp.net) or a full JID copied from a message log row."
+          }
+        },
+        { "name": "Delete Contact Filter", "request": { "method": "DELETE", "url": "{{baseUrl}}/portal/contact-filters/{{filterId}}" } }
+      ]
+    },
+    {
+      "name": "Super Admin (cookie session)",
+      "description": "Session-cookie auth for the platform-wide super-admin account (not tenant-scoped). Run 'Login' first.",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"changeme\"\n}" }
+          }
+        },
+        { "name": "Logout", "request": { "method": "POST", "url": "{{baseUrl}}/admin/logout" } },
+        { "name": "Me", "request": { "method": "GET", "url": "{{baseUrl}}/admin/me" } },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/forgot-password",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@example.com\"\n}" }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/reset-password",
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"<from email link>\",\n  \"password\": \"newSecurePassword123\"\n}" }
+          }
+        },
+        { "name": "List Tenants", "request": { "method": "GET", "url": "{{baseUrl}}/admin/tenants" } },
+        {
+          "name": "Create Tenant",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/tenants",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme Catering\",\n  \"rateLimitMinutes\": 1440\n}" }
+          }
+        },
+        { "name": "Get Tenant", "request": { "method": "GET", "url": "{{baseUrl}}/admin/tenants/{{tenantId}}" } },
+        {
+          "name": "Update Tenant",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/tenants/{{tenantId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"loginEmail\": \"tenant@example.com\",\n  \"groupReplyMode\": \"NEVER\",\n  \"greetingsOnly\": true,\n  \"replyToDirect\": true,\n  \"contactPolicy\": \"ALL\",\n  \"autoReplyBurstLimit\": 5,\n  \"rateLimitMinutes\": 1440,\n  \"status\": \"ACTIVE\",\n  \"assistantName\": \"Aria\",\n  \"ownerName\": \"Nizam\",\n  \"businessInfo\": \"Runs a BBQ catering business in Singapore.\",\n  \"personaInstructions\": \"Always confirm the event date before quoting.\"\n}"
+            },
+            "description": "Only send the fields you want changed — the handler ignores undefined fields rather than blanking them. apiKey/passwordHash cannot be set this way."
+          }
+        },
+        { "name": "Send Tenant Password Reset", "request": { "method": "POST", "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/send-password-reset" } },
+        {
+          "name": "List Tenant Message Logs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/tenants/{{tenantId}}/messages?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "tenants", "{{tenantId}}", "messages"],
+              "query": [{ "key": "limit", "value": "50" }]
+            }
+          }
+        },
+        { "name": "List Tenant Correction Rules", "request": { "method": "GET", "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/corrections" } },
+        {
+          "name": "Create Tenant Correction Rule",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/corrections",
+            "body": { "mode": "raw", "raw": "{\n  \"pattern\": \"unsubscribe\",\n  \"isRegex\": false,\n  \"action\": \"SKIP_REPLY\"\n}" }
+          }
+        },
+        { "name": "Delete Tenant Correction Rule", "request": { "method": "DELETE", "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/corrections/{{ruleId}}" } },
+        { "name": "List Tenant Contact Filters", "request": { "method": "GET", "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/contact-filters" } },
+        {
+          "name": "Create Tenant Contact Filter",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/contact-filters",
+            "body": { "mode": "raw", "raw": "{\n  \"jid\": \"6591234567\",\n  \"type\": \"BLOCK\",\n  \"label\": \"Spam number\"\n}" }
+          }
+        },
+        { "name": "Delete Tenant Contact Filter", "request": { "method": "DELETE", "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/contact-filters/{{filterId}}" } },
+        { "name": "List Tenant Sessions", "request": { "method": "GET", "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/sessions" } },
+        {
+          "name": "Create Tenant Session",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/sessions",
+            "body": { "mode": "raw", "raw": "{\n  \"label\": \"Main Line\"\n}" },
+            "description": "409s if the tenant already has a blocking session (PENDING_QR/CONNECTED/DISCONNECTED). Fire-and-forget: the QR code lands on the session row asynchronously, poll List Tenant Sessions for it."
+          }
+        },
+        { "name": "Reconnect Tenant Session", "request": { "method": "POST", "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/sessions/{{sessionId}}/reconnect" } },
+        {
+          "name": "Audit Logs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/audit-logs"
+          }
+        },
+        { "name": "List Super Admins", "request": { "method": "GET", "url": "{{baseUrl}}/admin/super-admins" } },
+        {
+          "name": "Create Super Admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/admin/super-admins",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"new-admin@example.com\",\n  \"password\": \"changeme123\",\n  \"name\": \"New Admin\"\n}" }
+          }
+        },
+        {
+          "name": "System Health",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/system/health",
+            "description": "Currently checks BullMQ queue depth and Ollama reachability only — does not check Postgres/Redis connectivity (Phase 2 backlog item)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Planned (Phase 2 backlog — not built yet)",
+      "description": "Placeholder requests for the roadmap in CLAUDE.md 'Phase 2 backlog'. These will 404 today; update the request once the route actually exists, and move it into the matching folder above.",
+      "item": [
+        {
+          "name": "[Planned] Conversational reply (multi-turn)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/portal/conversations/{{remoteJid}}/messages",
+            "description": "The whole pipeline is currently single-turn (one inbound message -> at most one reply, then rateLimitMinutes suppresses further replies). This is the user's next major feature: persist per-contact conversation history, pass it to Ollama as multi-turn context, and replace the blanket rate limiter with a per-conversation turn cap / idle timeout. Treat as a design task before implementation — see CLAUDE.md."
+          }
+        },
+        {
+          "name": "[Planned] Disconnected sessions dashboard",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/system/disconnected-sessions",
+            "description": "Explicit early requirement: super-admin should see which tenants are currently disconnected, in the UI, without a separate alert channel. Not built — GET /admin/system/health does not surface this today."
+          }
+        },
+        {
+          "name": "[Planned] Portal-side audit logging",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/portal/audit-logs",
+            "description": "writeAuditLog is called from every super-admin action but never from portal-side mutations (correction rule create/delete, session reconnect) even though ActorType.TENANT exists in the schema. Needs both the write side (in the existing portal controllers) and this read endpoint."
+          }
+        },
+        {
+          "name": "[Planned] Session-invalidation on password reset",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/portal/logout-other-sessions",
+            "description": "Original spec called for killing every other active session on password reset. Needs a per-user session-ID index in Redis that does not exist yet — not a one-line fix."
+          }
+        }
+      ]
+    }
+  ]
+}

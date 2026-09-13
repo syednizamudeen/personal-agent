@@ -8,6 +8,7 @@ import { Input } from '../../components/ui/Input';
 import { AssistantSettingsCard } from '../../components/AssistantSettingsCard';
 import type { AssistantSettings } from '../../components/AssistantSettingsCard';
 import { ContactFiltersCard } from '../../components/ContactFiltersCard';
+import { MessagesCard } from '../../components/MessagesCard';
 import { CorrectionRulesCard } from '../../components/CorrectionRulesCard';
 
 interface Tenant extends AssistantSettings {
@@ -193,6 +194,11 @@ export function TenantDetail() {
       <ContactFiltersCard
         basePath={`/admin/tenants/${id}/contact-filters`}
         queryKey={['admin', 'tenants', id, 'contact-filters']}
+      />
+
+      <MessagesCard
+        basePath={`/admin/tenants/${id}/messages`}
+        queryKey={['admin', 'tenants', id, 'messages']}
       />
 
       <Card>
